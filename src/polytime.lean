@@ -7,6 +7,9 @@ def polytime (c : code) : Prop :=
 lemma polytime.dom_univ {c : code} (p : polytime c) : c.eval.dom = set.univ :=
 by { cases p with p h, exact eval_dom_of_time_bound h, }
 
+lemma polytime.dom_univ' {c : code} (p : polytime c) : ∀ x, (c.eval x).dom :=
+by { intro x, change x ∈ c.eval.dom, rw p.dom_univ, trivial, }
+
 lemma polytime_left : polytime code.left :=
 ⟨polynomial.monomial 1 1, by simpa using time_bound_left⟩
 
