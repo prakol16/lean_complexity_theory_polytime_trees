@@ -1,0 +1,33 @@
+import data.polynomial.eval
+import time_bound
+
+def polytime (c : code) : Prop :=
+∃ (p : polynomial ℕ), time_bound c (λ n, p.eval n)
+
+lemma polytime.dom_univ {c : code} (p : polytime c) : c.eval.dom = set.univ :=
+by { cases p with p h, exact eval_dom_of_time_bound h, }
+
+lemma polytime_left : polytime code.left :=
+⟨polynomial.monomial 1 1, by simpa using time_bound_left⟩
+
+lemma polytime_right : polytime code.right := polytime_left
+
+lemma polytime_id : polytime code.id := polytime_left
+
+lemma polytime_nil : polytime code.nil := ⟨1, by simpa using time_bound_nil⟩
+
+lemma polytime_node {c₁ c₂ : code} : polytime c₁ → polytime c₂ → polytime (code.node c₁ c₂)
+| ⟨p₁, e₁⟩ ⟨p₂, e₂⟩ := by { use p₁ + p₂ + 1, convert time_bound_node e₁ e₂, simp, }
+
+lemma polytime_comp {c₁ c₂ : code} : polytime c₁ → polytime c₂ → polytime (code.comp c₁ c₂)
+| ⟨p₁, e₁⟩ ⟨p₂, e₂⟩ := by { use (p₁.comp p₂) + p₂ + 1, convert time_bound_comp e₁ e₂, simp, }
+
+lemma polytime_case {c₁ c₂ : code} : polytime c₁ → polytime c₂ → polytime (code.case c₁ c₂)
+| ⟨p₁, e₁⟩ ⟨p₂, e₂⟩ := by { use p₁ + p₂ + 1, convert time_bound_case' e₁ e₂, simp, }
+
+lemma polytime_const (v : ptree) : polytime (code.const v) :=
+by { induction v, { exact polytime_nil, }, apply polytime_node; assumption }
+
+lemma polytime_ite {c₁ c₂ c₃ : code} (p₁ : polytime c₁) (p₂ : polytime c₂) (p₃ : polytime c₃) :
+  polytime (code.ite c₁ c₂ c₃) :=
+polytime_comp (polytime_case p₂ p₃) (polytime_node p₁ polytime_id)

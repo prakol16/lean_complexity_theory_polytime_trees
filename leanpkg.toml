@@ -1,0 +1,8 @@
+[package]
+name = "polytime_from_trees"
+version = "0.1"
+lean_version = "leanprover-community/lean:3.44.1"
+path = "src"
+
+[dependencies]
+mathlib = {git = "https://github.com/leanprover-community/mathlib", rev = "00c17d657767c048b3c4623c37e8ed28b7e983ea"}
