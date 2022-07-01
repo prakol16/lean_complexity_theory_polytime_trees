@@ -7,67 +7,6 @@ import polytime
 def polydecidable_aux (P : ptree → Prop) : Prop :=
 ∃ (c : code) (pc : polytime c), ∀ x, ptree.nil ∈ c.eval x ↔ P x 
 
--- lemma polydecidable_code_eval_nil_iff (P : ptree → Prop) [h : polydecidable P] (x : ptree) :
---   (h.c.eval.to_fun h.pc.dom_univ x = ptree.nil) ↔ P x :=
--- by { unfreezingI { cases h with c pc sound }, rw ← sound x, exact part.get_eq_iff_mem _, }
-
--- def decidable_of_polydecidable (P : ptree → Prop) [polydecidable P] : decidable_pred P :=
--- by { intro x, rw ← polydecidable_code_eval_nil_iff P x, apply_instance, }
-
--- private lemma no_confusion_ite_ptree (c : Prop) [decidable c] (a b : ptree) (z : part ptree) :
---   ptree.nil ∈ (if c then z else (part.some $ ptree.node a b)) ↔ c ∧ ptree.nil ∈ z :=
--- by split_ifs; simp [h]
-
--- private lemma no_confusion_ite_ptree' (c : Prop) [decidable c] (a b : ptree) (z : part ptree) :
---   ptree.nil ∈ (if c then (part.some $ ptree.node a b) else z) ↔ ¬c ∧ ptree.nil ∈ z :=
--- by split_ifs; simp [h]
-
--- private lemma no_confusion_ite_ptree'' (c : Prop) [decidable c] (a b : ptree) :
---   ptree.nil = (if c then (ptree.node a b) else ptree.nil) ↔ ¬c :=
--- by split_ifs; simp [h]
-
--- private lemma no_confusion_ite_ptree''' (c : Prop) [decidable c] (a b : ptree) :
---   ptree.nil = (if c then ptree.nil else (ptree.node a b)) ↔ c :=
--- by split_ifs; simp [h]
-
--- instance polydecidable_true : polydecidable (λ _, true) :=
--- ⟨code.nil, polytime_nil, λ x, by simp⟩
-
--- instance polydecidable_false : polydecidable (λ _, false) :=
--- ⟨code.const (ptree.node ptree.nil ptree.nil), polytime_const _, λ _, by simp⟩
-
--- instance polydecidable_and (P₁ P₂ : ptree → Prop) [h₁ : polydecidable P₁] [h₂ : polydecidable P₂] :
---   polydecidable (λ x, P₁ x ∧ P₂ x) :=
--- begin
---   unfreezingI { cases h₁ with c₁ pc₁ sound₁, cases h₂ with c₂ pc₂ sound₂, },
---   use code.ite c₁ c₂ (code.const $ ptree.node ptree.nil ptree.nil),
---   { apply polytime_ite pc₁ pc₂, apply polytime_const, },
---   intro x, simp [no_confusion_ite_ptree, sound₁, sound₂],
---   split, { rintro ⟨nil', h₁, rfl, h₂⟩, rw sound₁ at h₁, exact ⟨h₁, h₂⟩, },
---   { rintro ⟨h₁, h₂⟩, use ptree.nil, simp [sound₁, h₁, h₂], }
--- end
-
--- instance polydecidable_not (P : ptree → Prop) [h : polydecidable P] :
---   polydecidable (λ x, ¬P x) :=
--- begin
---   unfreezingI { cases h with c pc sound, },
---   use code.ite c (code.const $ ptree.node ptree.nil ptree.nil) code.nil,
---   { apply polytime_ite pc (polytime_const _) polytime_nil, },
---   intro x, simp [← apply_ite part.some, no_confusion_ite_ptree''],
---   split, { rintro ⟨v, hv, hv'⟩ p, rw ← sound at p, cases part.mem_unique hv p, contradiction, },
---   { intro h, rw ← sound at h,
---     obtain ⟨a, ha⟩ := (_ : ∃ a, a ∈ c.eval x), swap,
---     { rw ← part.dom_iff_mem, change x ∈ c.eval.dom, rw pc.dom_univ, trivial, },
---     use [a, ha], rintro ⟨rfl⟩, contradiction, }
--- end
-
--- instance polydecidable_or (P₁ P₂ : ptree → Prop) [polydecidable P₁] [polydecidable P₂] :
---   polydecidable (λ x, P₁ x ∨ P₂ x) :=
--- by { simp only [or_iff_not_and_not], apply_instance, }
-
--- def polydecidable_eq_nil : polydecidable (=ptree.nil) :=
--- ⟨code.id, polytime_id, λ x, by { simp, exact comm, }⟩
-
 class polycodable (α : Type*) :=
 (encode : α ↪ ptree)
 (mem_poly' : polydecidable_aux (∈ set.range encode))
@@ -88,12 +27,15 @@ def polydecidable (P : α → Prop) : Prop :=
 @[simp] lemma polydecidable_aux_iff (P : ptree → Prop) : polydecidable_aux P ↔ polydecidable P :=
 ⟨λ ⟨c, pc, sound⟩, ⟨c, pc, sound⟩, λ ⟨c, pc, sound⟩, ⟨c, pc, sound⟩⟩
 
+lemma mem_poly (α : Type*) [polycodable α] : polydecidable (∈ set.range (@encode α _)) := polycodable.mem_poly'
+
 def polytime_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) :=
 ∃ (c : code) (pc : polytime c), ∀ x, c.eval (encode x) = part.some (encode (f x))
 
 section polytime_fun
 
-lemma polydecidable_of_preimage_polytime {f : β → α} {P : α → Prop}  :
+@[elab_as_eliminator]
+lemma polydecidable_of_preimage_polytime {f : β → α} (P : α → Prop)  :
   polytime_fun f → polydecidable P → polydecidable (λ y, P (f y))
 | ⟨c₁, pc₁, sound₁⟩ ⟨c₂, pc₂, sound₂⟩ := ⟨c₂.comp c₁, polytime_comp pc₂ pc₁, λ y, by simp [sound₁, sound₂]⟩
 
@@ -149,21 +91,96 @@ begin
 end
 
 private lemma eq_nil_aux : polydecidable (=ptree.nil) := ⟨code.id, polytime_id, λ x, by { simp, exact comm, }⟩
+
+lemma polydecidable.children {P₁ P₂ : ptree → Prop} (h₁ : polydecidable P₁) (h₂ : polydecidable P₂) :
+  polydecidable (λ x, x ≠ ptree.nil ∧ P₁ x.left ∧ P₂ x.right) :=
+begin
+  apply polydecidable.and, apply polydecidable.not eq_nil_aux, apply polydecidable.and,
+  exact polydecidable_of_preimage_polytime _ polytime_fun.ptree_left h₁,
+  exact polydecidable_of_preimage_polytime _ polytime_fun.ptree_right h₂,
+end
+
 private lemma eq_const_aux : ∀ (x : ptree), polydecidable (=x)
 | ptree.nil := eq_nil_aux
 | (ptree.node a b) :=
 begin
   convert_to polydecidable (λ x, x ≠ ptree.nil ∧ x.left = a ∧ x.right = b),
   { ext x, cases x; simp, },
-  apply polydecidable.and, apply polydecidable.not eq_nil_aux, apply polydecidable.and,
-  exact polydecidable_of_preimage_polytime polytime_fun.ptree_left (eq_const_aux a),
-  exact polydecidable_of_preimage_polytime polytime_fun.ptree_right (eq_const_aux b),
+  exact polydecidable.children (eq_const_aux a) (eq_const_aux b),
 end
 
 lemma polydecidable.eq_const (x : α) : polydecidable (=x) :=
 let ⟨c, pc, s⟩ := eq_const_aux (encode x) in ⟨c, pc, λ x', by simpa using s (encode x')⟩
 
+section pair
 
+instance : polycodable (α × β) :=
+{ encode := ⟨λ x, ptree.node (encode x.1) (encode x.2), λ ⟨a₁, b₁⟩ ⟨a₂, b₂⟩, by simpa using and.intro⟩,
+  mem_poly' :=
+begin
+  convert_to polydecidable (λ x, x ≠ ptree.nil ∧ x.left ∈ set.range (@encode α _) ∧ x.right ∈ set.range (@encode β _)),
+  { ext x, split,
+    { rintro ⟨y, hy⟩, simp at hy, subst hy, simp, }, 
+    rintro ⟨nnil, ⟨ly, hly⟩, ⟨ry, hry⟩⟩,
+    have : x = ptree.node (encode ly) (encode ry), { cases x, contradiction, simp [hly, hry], }, subst this,
+    use (ly, ry), simp, },
+  exact polydecidable.children (mem_poly α) (mem_poly β)
+end }
+
+lemma polytime_fun.prod_fst : polytime_fun (@prod.fst α β) :=
+⟨code.left, polytime_left, λ ⟨a, b⟩, by { simp, refl, }⟩
+
+lemma polytime_fun.prod_snd : polytime_fun (@prod.snd α β) :=
+⟨code.right, polytime_left, λ ⟨a, b⟩, by { simp, refl, }⟩
+
+lemma polytime_fun.pair {f : α → β} {g : α → γ} : polytime_fun f → polytime_fun g → polytime_fun (λ x, (f x, g x))
+| ⟨c₁, pc₁, s₁⟩ ⟨c₂, pc₂, s₂⟩ := ⟨code.node c₁ c₂, polytime_node pc₁ pc₂, λ x, by { simp [s₁, s₂], refl, }⟩
+
+def polytime_fun₂ (f : α → β → γ) : Prop := polytime_fun (function.uncurry f)
+
+lemma is_polytime₂_comp {δ : Type*} [polycodable δ] {f : α → β → γ} {g : δ → α} {h : δ → β} 
+  (hf : polytime_fun₂ f) (hg : polytime_fun g) (hh : polytime_fun h) :
+  polytime_fun (λ x, f (g x) (h x)) :=
+polytime_fun.comp hf (polytime_fun.pair hg hh)
+
+end pair
+
+section bool
+
+instance : polycodable bool :=
+{ encode := ⟨λ b, cond b ptree.nil (ptree.node ptree.nil ptree.nil), 
+begin
+  rw function.injective_iff_has_left_inverse,
+  use (=ptree.nil), intro b, cases b; simp,
+end⟩,
+  mem_poly' :=
+begin
+  rw polydecidable_aux_iff,
+  convert_to polydecidable (λ x, x = ptree.nil ∨ x = ptree.node ptree.nil ptree.nil),
+  { ext v, split, { rintro ⟨b, hb⟩, cases b; simp at hb; tauto, },
+    rintro (rfl|rfl), { use tt, simp, }, { use ff, simp, } },
+  apply polydecidable.or; apply polydecidable.eq_const _,
+end }
+
+lemma polydecidable_iff_polytime_fun (P : α → Prop) [decidable_pred P] :
+  polydecidable P ↔ polytime_fun (λ x, (P x : bool)) :=
+begin
+  split,
+  { intro h, change polytime_fun (λ x, if P x then tt else ff),
+    apply polytime_fun.ite h; apply polytime_fun.const _, },
+  { intro h, convert_to polydecidable (λ x, (P x : bool) = tt),
+    { ext x, simp, }, 
+    apply polydecidable_of_preimage_polytime (=tt) h,
+    apply polydecidable.eq_const _, }
+end
+
+end bool
+
+section list
+
+
+
+end list
 
 end polytime_fun
 
