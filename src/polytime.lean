@@ -10,6 +10,9 @@ by { cases p with p h, exact eval_dom_of_time_bound h, }
 lemma polytime.dom_univ' {c : code} (p : polytime c) : ∀ x, (c.eval x).dom :=
 by { intro x, change x ∈ c.eval.dom, rw p.dom_univ, trivial, }
 
+@[simp] def polytime.to_fun {c : code} (pc : polytime c) (x : ptree) : ptree :=
+(c.eval x).get (pc.dom_univ' _)
+
 lemma polytime_left : polytime code.left :=
 ⟨polynomial.monomial 1 1, by simpa using time_bound_left⟩
 

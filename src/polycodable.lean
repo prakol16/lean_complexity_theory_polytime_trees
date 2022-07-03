@@ -32,7 +32,15 @@ lemma mem_poly (α : Type*) [polycodable α] : polydecidable (∈ set.range (@en
 def polytime_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) :=
 ∃ (c : code) (pc : polytime c), ∀ x, c.eval (encode x) = part.some (encode (f x))
 
+lemma polydecidable.of_eq {P₁ : α → Prop} (P₂ : α → Prop) (h : ∀ x, P₁ x ↔ P₂ x) : polydecidable P₁ ↔ polydecidable P₂ :=
+by rw [(show P₁ = P₂, by { ext, rw h, })]
+
 section polytime_fun
+
+lemma polytime_fun.encode : polytime_fun (@encode α _) :=
+⟨code.id, polytime_id, λ x, by simp⟩
+
+lemma polytime_fun.decode {f : α → β} (hf : polytime_fun (encode ∘ f)) : polytime_fun f := hf
 
 @[elab_as_eliminator]
 lemma polydecidable_of_preimage_polytime {f : β → α} (P : α → Prop)  :
@@ -64,16 +72,22 @@ begin
     rw ← part.dom_iff_mem, exact pc₁.dom_univ' _, }
 end⟩
 
+lemma polytime_fun.polytime_to_fun {c : code} (pc : polytime c) :
+  polytime_fun pc.to_fun :=
+⟨c, pc, λ x, by simp [polytime.to_fun]⟩
+
+lemma polydecidable.true : @polydecidable α _ (λ _, true) :=
+⟨code.nil, polytime_nil, λ x, by simp⟩
+
 lemma polydecidable.or {P₁ P₂ : α → Prop} : polydecidable P₁ → polydecidable P₂ → polydecidable (λ x, (P₁ x) ∨ (P₂ x)) :=
 begin
   classical,
   rintros h₁ ⟨c₂, pc₂, s₂⟩,
-  suffices : polytime_fun (λ x, if P₁ x then ptree.nil else c₂.eval.to_fun pc₂.dom_univ (encode x)),
+  suffices : polytime_fun (λ x, if P₁ x then ptree.nil else pc₂.to_fun (encode x)),
   { rcases this with ⟨c, pc, s⟩, use [c, pc], intro x,
     by_cases h : P₁ x, { simp [s, h], },
     simp [s, h, pfun.to_fun, s₂], },
-  apply polytime_fun.ite h₁ (polytime_fun.const _) ⟨c₂, pc₂, _⟩,
-  intro x, simp [pfun.to_fun],
+  apply polytime_fun.ite h₁ (polytime_fun.const _) _, apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.encode,
 end
 
 lemma polydecidable.not {P : α → Prop} (h : polydecidable P) : polydecidable (λ x, ¬P x) :=
@@ -104,8 +118,8 @@ private lemma eq_const_aux : ∀ (x : ptree), polydecidable (=x)
 | ptree.nil := eq_nil_aux
 | (ptree.node a b) :=
 begin
-  convert_to polydecidable (λ x, x ≠ ptree.nil ∧ x.left = a ∧ x.right = b),
-  { ext x, cases x; simp, },
+  rw polydecidable.of_eq (λ x, x ≠ ptree.nil ∧ x.left = a ∧ x.right = b), swap,
+  { intro x, cases x; simp, },
   exact polydecidable.children (eq_const_aux a) (eq_const_aux b),
 end
 
@@ -118,8 +132,9 @@ instance : polycodable (α × β) :=
 { encode := ⟨λ x, ptree.node (encode x.1) (encode x.2), λ ⟨a₁, b₁⟩ ⟨a₂, b₂⟩, by simpa using and.intro⟩,
   mem_poly' :=
 begin
-  convert_to polydecidable (λ x, x ≠ ptree.nil ∧ x.left ∈ set.range (@encode α _) ∧ x.right ∈ set.range (@encode β _)),
-  { ext x, split,
+  rw polydecidable_aux_iff,
+  rw polydecidable.of_eq (λ x, x ≠ ptree.nil ∧ x.left ∈ set.range (@encode α _) ∧ x.right ∈ set.range (@encode β _)),
+  swap, { intro x, split,
     { rintro ⟨y, hy⟩, simp at hy, subst hy, simp, }, 
     rintro ⟨nnil, ⟨ly, hly⟩, ⟨ry, hry⟩⟩,
     have : x = ptree.node (encode ly) (encode ry), { cases x, contradiction, simp [hly, hry], }, subst this,
@@ -138,10 +153,13 @@ lemma polytime_fun.pair {f : α → β} {g : α → γ} : polytime_fun f → pol
 
 def polytime_fun₂ (f : α → β → γ) : Prop := polytime_fun (function.uncurry f)
 
-lemma is_polytime₂_comp {δ : Type*} [polycodable δ] {f : α → β → γ} {g : δ → α} {h : δ → β} 
+lemma polytime_fun.comp₂ {δ : Type*} [polycodable δ] {f : α → β → γ} {g : δ → α} {h : δ → β} 
   (hf : polytime_fun₂ f) (hg : polytime_fun g) (hh : polytime_fun h) :
   polytime_fun (λ x, f (g x) (h x)) :=
 polytime_fun.comp hf (polytime_fun.pair hg hh)
+
+@[simp] lemma encode_pair_encode_fst (x : α) (y : β) : encode (encode x, y) = encode (x, y) := rfl
+@[simp] lemma encode_pair_encode_snd (x : α) (y : β) : encode (x, encode y) = encode (x, y) := rfl
 
 end pair
 
@@ -170,13 +188,135 @@ begin
     apply polytime_fun.ite h; apply polytime_fun.const _, },
   { intro h, convert_to polydecidable (λ x, (P x : bool) = tt),
     { ext x, simp, }, 
-    apply polydecidable_of_preimage_polytime (=tt) h,
-    apply polydecidable.eq_const _, }
+    apply polydecidable_of_preimage_polytime (=tt) h, apply polydecidable.eq_const _, }
 end
 
 end bool
 
+
+def polycodable.mk' {δ : Type*} (encode : δ ↪ α) (mem_poly : polydecidable (∈ set.range encode)) : polycodable δ :=
+{ encode := encode.trans polycodable.encode,
+  mem_poly' :=
+begin
+  rw polydecidable_aux_iff,
+  rcases mem_poly with ⟨c, pc, s⟩,
+  rw polydecidable.of_eq (λ x, x ∈ set.range (@polycodable.encode α _) ∧ pc.to_fun x = ptree.nil), swap,
+  { intro x, split,
+    { intro h, rcases h with ⟨z, hz⟩,
+    have : x ∈ set.range (@polycodable.encode α _) := ⟨encode z, by simpa using hz⟩, 
+    refine ⟨this, _⟩, rcases this with ⟨x', rfl⟩,
+    simp only [polytime.to_fun, part.get_eq_iff_mem, s], use z, simpa using hz, },
+    { rintro ⟨⟨y, rfl⟩, H⟩, simpa [part.get_eq_iff_mem, s] using H }, },
+  apply polydecidable.and, { exact _root_.mem_poly _, },
+  apply polydecidable_of_preimage_polytime (=ptree.nil), { apply polytime_fun.polytime_to_fun, }, apply polydecidable.eq_const,
+end }
+
+lemma polytime_fun.encode' {δ : Type*} (encode : δ ↪ α) (mem_poly : polydecidable (∈ set.range encode)) :
+  @polytime_fun δ α (polycodable.mk' encode mem_poly) _ encode :=
+by { haveI : polycodable δ := polycodable.mk' encode mem_poly, use [code.id, polytime_id], intro x, simp, refl, }
+
+lemma polytime_fun.decode' {δ : Type*} (encode : δ ↪ α) (mem_poly : polydecidable (∈ set.range encode))
+  {f : β → δ} (pg : polytime_fun (encode ∘ f)) : @polytime_fun β δ _ (polycodable.mk' encode mem_poly) f := pg
+
+section sum
+
+def encode_sum : α ⊕ β → bool × ptree
+| (sum.inl a) := (ff, encode a)
+| (sum.inr b) := (tt, encode b)
+
+lemma encode_sum_injective : function.injective (@encode_sum α β _ _) :=
+λ x y, by cases x; cases y; simp [encode_sum]
+
+lemma mem_encode_sum_decidable : polydecidable (∈ set.range (@encode_sum α β _ _)) :=
+begin
+  rw polydecidable.of_eq (λ x : bool × ptree, x.1 = ff ∧ x.2 ∈ set.range (@encode α _) ∨ x.1 = tt ∧ x.2 ∈ set.range (@encode β _)),
+  swap, { rintro ⟨b, x⟩, cases b; simp [encode_sum], },
+  apply polydecidable.or; apply polydecidable.and,
+  { apply polydecidable_of_preimage_polytime _ (polytime_fun.prod_fst) (polydecidable.eq_const ff), },
+  { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_snd (mem_poly α), },
+  { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_fst (polydecidable.eq_const tt), },
+  { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_snd (mem_poly β), },
+end
+
+instance : polycodable (α ⊕ β) :=
+polycodable.mk' ⟨encode_sum, encode_sum_injective⟩ mem_encode_sum_decidable
+
+private lemma polytime_fun_encode_sum : polytime_fun (@encode_sum α β _ _) :=
+polytime_fun.encode' _ _
+
+lemma polytime_fun.sum_inl : polytime_fun (@sum.inl α β) :=
+begin
+  apply polytime_fun.decode',
+  change polytime_fun (λ x : α, (ff, encode x)),
+  apply polytime_fun.pair, apply polytime_fun.const, apply polytime_fun.encode,
+end
+
+lemma polytime_fun.sum_inr : polytime_fun (@sum.inr α β) :=
+begin
+  apply polytime_fun.decode',
+  change polytime_fun (λ x : β, (tt, encode x)),
+  apply polytime_fun.pair, apply polytime_fun.const, apply polytime_fun.encode,
+end
+
+lemma polytime_fun.sum_elim {δ : Type} [polycodable δ] 
+  {f : α → β ⊕ γ} {g : α → β → δ} {h : α → γ → δ} (hf : polytime_fun f) (hg : polytime_fun₂ g) (hh : polytime_fun₂ h) :
+  polytime_fun (λ x, (f x).elim (g x) (h x)) :=
+begin
+  rcases hg with ⟨gc, pgc, sg⟩, rcases hh with ⟨hc, phc, sh⟩,
+  apply polytime_fun.decode,
+  convert_to polytime_fun (λ x : α,
+  if (encode_sum $ f x).1 = ff then pgc.to_fun (encode $ (x, (encode_sum $ f x).2))
+  else phc.to_fun (encode $ (x, (encode_sum $ f x).2))),
+  { ext x, simp only [function.comp_app], cases f x, simp [encode_sum, sg (x, val)], simp [encode_sum, sh (x, val)], },
+  clear sg sh,
+  apply polytime_fun.ite,
+  { apply polydecidable_of_preimage_polytime (=ff), apply polytime_fun.comp, apply polytime_fun.prod_fst, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf, apply polydecidable.eq_const, },
+  apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.comp, apply polytime_fun.encode,
+  apply polytime_fun.pair, apply polytime_fun.id, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf,
+  apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.pair, apply polytime_fun.id, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf,
+end
+
+end sum
+
 section list
+
+def ptree_list_encoding_aux : polycodable (list ptree) :=
+{ encode := ⟨ptree.equiv_list.symm, λ x y hxy, by simpa using hxy⟩,
+  mem_poly' := by { convert polydecidable.true, ext x, simp, } }
+
+local attribute [instance] ptree_list_encoding_aux
+/--
+polytime fix:
+If a function increases size by at most a constant and is applied polynomially
+many times, it runs in polynomial time.
+
+Pf: Say it takes input size x --> x + C
+Time:
+p(x) + p(x+C) + p(x+2C) + ... + p(x+q(x)C)
+
+-/
+
+lemma polytime_fun.head : polytime_fun (@list.head ptree _) :=
+⟨code.left, polytime_left,
+by { intro x, dunfold polycodable.encode, cases x; simp, refl, }⟩
+
+lemma polytime_fun.tail : polytime_fun (@list.tail ptree) :=
+⟨code.right, polytime_right,
+by { intro x, dunfold polycodable.encode, cases x; simp, }⟩
+
+lemma polytime_fun.cons : polytime_fun₂ (@list.cons ptree) :=
+⟨code.id, polytime_id,
+by { intro x, dunfold polycodable.encode, cases x; simp, }⟩
+
+def foldr_step (f : ptree → ptree) (l : list ptree × list ptree) : list ptree × list ptree :=
+(l.1.tail, f l.1.head :: l.2)
+
+lemma polytime_foldr_step {f : ptree → ptree} (hf : polytime_fun f) : polytime_fun (foldr_step f) :=
+begin
+  apply polytime_fun.pair,
+  { apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.prod_fst, },
+  { apply polytime_fun.comp₂, apply polytime_fun.cons, apply polytime_fun.comp hf, apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, },
+end
 
 
 

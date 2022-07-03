@@ -8,6 +8,8 @@ inductive ptree
 
 namespace ptree
 
+instance : inhabited ptree := ⟨nil⟩
+
 @[simp] def left : ptree → ptree
 | nil := nil
 | (node l r) := l
