@@ -3,7 +3,6 @@ import logic.embedding
 import pfun_to_fun
 import polytime
 
-
 def polydecidable_aux (P : ptree → Prop) : Prop :=
 ∃ (c : code) (pc : polytime c), ∀ x, ptree.nil ∈ c.eval x ↔ P x 
 
@@ -221,20 +220,20 @@ lemma polytime_fun.decode' {δ : Type*} (encode : δ ↪ α) (mem_poly : polydec
 section sum
 
 def encode_sum : α ⊕ β → bool × ptree
-| (sum.inl a) := (ff, encode a)
-| (sum.inr b) := (tt, encode b)
+| (sum.inl a) := (tt, encode a)
+| (sum.inr b) := (ff, encode b)
 
 lemma encode_sum_injective : function.injective (@encode_sum α β _ _) :=
 λ x y, by cases x; cases y; simp [encode_sum]
 
 lemma mem_encode_sum_decidable : polydecidable (∈ set.range (@encode_sum α β _ _)) :=
 begin
-  rw polydecidable.of_eq (λ x : bool × ptree, x.1 = ff ∧ x.2 ∈ set.range (@encode α _) ∨ x.1 = tt ∧ x.2 ∈ set.range (@encode β _)),
+  rw polydecidable.of_eq (λ x : bool × ptree, x.1 = tt ∧ x.2 ∈ set.range (@encode α _) ∨ x.1 = ff ∧ x.2 ∈ set.range (@encode β _)),
   swap, { rintro ⟨b, x⟩, cases b; simp [encode_sum], },
   apply polydecidable.or; apply polydecidable.and,
-  { apply polydecidable_of_preimage_polytime _ (polytime_fun.prod_fst) (polydecidable.eq_const ff), },
+  { apply polydecidable_of_preimage_polytime _ (polytime_fun.prod_fst) (polydecidable.eq_const tt), },
   { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_snd (mem_poly α), },
-  { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_fst (polydecidable.eq_const tt), },
+  { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_fst (polydecidable.eq_const ff), },
   { apply polydecidable_of_preimage_polytime _ polytime_fun.prod_snd (mem_poly β), },
 end
 
@@ -247,14 +246,14 @@ polytime_fun.encode' _ _
 lemma polytime_fun.sum_inl : polytime_fun (@sum.inl α β) :=
 begin
   apply polytime_fun.decode',
-  change polytime_fun (λ x : α, (ff, encode x)),
+  change polytime_fun (λ x : α, (tt, encode x)),
   apply polytime_fun.pair, apply polytime_fun.const, apply polytime_fun.encode,
 end
 
 lemma polytime_fun.sum_inr : polytime_fun (@sum.inr α β) :=
 begin
   apply polytime_fun.decode',
-  change polytime_fun (λ x : β, (tt, encode x)),
+  change polytime_fun (λ x : β, (ff, encode x)),
   apply polytime_fun.pair, apply polytime_fun.const, apply polytime_fun.encode,
 end
 
@@ -265,12 +264,12 @@ begin
   rcases hg with ⟨gc, pgc, sg⟩, rcases hh with ⟨hc, phc, sh⟩,
   apply polytime_fun.decode,
   convert_to polytime_fun (λ x : α,
-  if (encode_sum $ f x).1 = ff then pgc.to_fun (encode $ (x, (encode_sum $ f x).2))
+  if (encode_sum $ f x).1 = tt then pgc.to_fun (encode $ (x, (encode_sum $ f x).2))
   else phc.to_fun (encode $ (x, (encode_sum $ f x).2))),
   { ext x, simp only [function.comp_app], cases f x, simp [encode_sum, sg (x, val)], simp [encode_sum, sh (x, val)], },
   clear sg sh,
   apply polytime_fun.ite,
-  { apply polydecidable_of_preimage_polytime (=ff), apply polytime_fun.comp, apply polytime_fun.prod_fst, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf, apply polydecidable.eq_const, },
+  { apply polydecidable_of_preimage_polytime (=tt), apply polytime_fun.comp, apply polytime_fun.prod_fst, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf, apply polydecidable.eq_const, },
   apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.comp, apply polytime_fun.encode,
   apply polytime_fun.pair, apply polytime_fun.id, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf,
   apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.pair, apply polytime_fun.id, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf,

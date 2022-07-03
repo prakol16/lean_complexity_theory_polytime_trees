@@ -28,6 +28,15 @@ def frespects_once (F : α₁ → α₂) : Prop :=
 ∀ a₁, ((f₂ (F a₁)).dom → (f₁ a₁).dom) ∧ (∀ a₁', sum.inr a₁' ∈ f₁ a₁ → (sum.inr $ F a₁') ∈ (f₂ (F a₁)))
   ∧ ((∃ b₁, sum.inl b₁ ∈ f₁ a₁) → ∃ b₂, sum.inl b₂ ∈ f₂ (F a₁))
 
+def frespects_once' (F : α₁ → α₂) (G : β₁ → β₂) : Prop :=
+∀ a₁, ((f₂ (F a₁)).dom → (f₁ a₁).dom) ∧ (∀ a₁', sum.inr a₁' ∈ f₁ a₁ → (sum.inr $ F a₁') ∈ (f₂ (F a₁)))
+  ∧ (∀ b₁, sum.inl b₁ ∈ f₁ a₁ → sum.inl (G b₁) ∈ f₂ (F a₁))
+
+lemma frespects_once_of_frespects_once' {F : α₁ → α₂} {G : β₁ → β₂} (hFG : frespects_once' f₁ f₂ F G) :
+  frespects_once f₁ f₂ F :=
+by { intro a₁, specialize hFG a₁, refine ⟨hFG.1, hFG.2.1, _⟩, rintro ⟨b₁, hb₁⟩, use (G b₁), exact hFG.2.2 b₁ hb₁, }
+
+section
 variables {F : α₁ → α₂} (hF : frespects_once f₁ f₂ F) {f₁ f₂}
 include hF
 
@@ -111,6 +120,20 @@ begin
   specialize ih y' hyF,
   rw part.dom_iff_mem at ih, 
   rwa fix_fwd _ _ hy'
+end
+end
+
+variables {F : α₁ → α₂} {G : β₁ → β₂} {f₁ f₂}
+theorem eq_val_of_frespects_once' (hFG : frespects_once' f₁ f₂ F G) (a : α₁) :
+  (pfun.fix f₁ a).map G = pfun.fix f₂ (F a) :=
+begin
+  have := frespects_once_of_frespects_once' _ _ hFG,
+  apply part.ext', { exact eq_dom_of_frespects_once _ this a, },
+  intros h₁ h₂, simp only [part.map_get, function.comp_app, part.map_dom] at h₁ ⊢,
+  set v₁ := (f₁.fix a).get h₁ with hv₁, set v₂ := (f₂.fix (F a)).get h₂ with hv₂, change G v₁ = v₂,
+  rw part.eq_get_iff_mem at hv₁ hv₂,
+  obtain ⟨l, hl₁, hl₂⟩ := frespects_last_step this hv₁ hv₂,
+  simpa using part.mem_unique ((hFG l).2.2 v₁ hl₁) hl₂,
 end
 
 end pfun
