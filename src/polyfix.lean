@@ -23,6 +23,30 @@ begin
   cases hf : f x; simp [fix_bounded_while, H],
 end
 
+private lemma fix_bounded_terminates_weaken_prop {f : α → β ⊕ α} {P Q : α → Prop} {n : ℕ} {x₀ : α} [decidable_pred P] [decidable_pred Q]
+  (h : ∀ x, P x → Q x) (hb : fix_bounded_terminates f P n x₀) : fix_bounded_terminates f Q n x₀ :=
+begin
+  induction n with n ih generalizing x₀,
+  { contradiction, },
+  rw fix_bounded_terminates_iff at hb ⊢,
+  exact ⟨h _ hb.1, λ x hx, ih (hb.2 _ hx)⟩,
+end
+
+private lemma fix_bounded_terminates_weaken_ind {f : α → β ⊕ α} {P : α → Prop} {m n : ℕ} {x₀ : α} [decidable_pred P]
+  (hmn : m ≤ n) (hb : fix_bounded_terminates f P m x₀) : fix_bounded_terminates f P n x₀ :=
+begin
+  induction n with n ih generalizing m x₀,
+  { simp at hmn, subst hmn, contradiction, },
+  cases m, { contradiction, },
+  rw nat.succ_le_succ_iff at hmn,
+  rw fix_bounded_terminates_iff at hb ⊢,
+  exact ⟨hb.1, λ x' hx, ih hmn (hb.2 _ hx)⟩,
+end
+
+lemma fix_bounded_terminates_weaken {f : α → β ⊕ α} {P Q : α → Prop} {m n : ℕ} {x₀ : α} [decidable_pred P] [decidable_pred Q]
+  (hp : ∀ x, P x → Q x) (hmn : m ≤ n) (hb : fix_bounded_terminates f P m x₀) : fix_bounded_terminates f Q n x₀ :=
+fix_bounded_terminates_weaken_ind hmn (fix_bounded_terminates_weaken_prop hp hb)
+
 lemma fix_eq_fix_bounded {f : α → β ⊕ α} {P : α → Prop} [decidable_pred P] {x : α} {y : β} {i : ℕ}
   (h : y ∈ fix_bounded_while f P i x) : y ∈ pfun.fix (f : α →. β ⊕ α) x :=
 begin
@@ -112,29 +136,21 @@ begin
   rcases this with ⟨t, ht, Ht⟩, rcases ih with ⟨t, ht₂, Ht₂⟩, cases part.mem_unique ht ht₂,
   suffices : t' + 1 ≤ j * T + T + 1, { simpa [nat.succ_mul] using this, },
   rw ← Ht, nlinarith only [Ht₂, t₁_le],
-  -- have : sum.inr
 end
 
-
-private def c_invariant (c : code) (hc : c.eval.dom = set.univ) (v : ptree) (T M : ℕ) : Prop :=
-  fix_bounded_terminates
-    (pfun.to_fun (eval_fix_fun c) (by rwa eval_fix_fun_dom_eq_dom))
-    (λ x, x.sizeof ≤ M) 
-    T v
-
-lemma time_bound_fix {c : code} {b₁ b₂ m : ℕ → ℕ} (hb₁ : time_bound c b₁)
-  (hb₂ : ∀ x : ptree, c_invariant c (eval_dom_of_time_bound hb₁) x (b₂ x.sizeof) (m x.sizeof)) : time_bound c.fix (λ t, (b₁ $ m t) * (b₂ t) + 1) :=
+lemma time_bound_fix {c : code} {b₁ b₂ m : ℕ → ℕ} (hb₁ : time_bound c b₁) (mono₁ : monotone b₁) (mono₂ : monotone b₂) (mono₃ : monotone m)
+  (hb₂ : ∀ x : ptree, fix_bounded_terminates
+    (pfun.to_fun (eval_fix_fun c) (by rw [eval_fix_fun_dom_eq_dom, eval_dom_of_time_bound hb₁]))
+    (λ x', x'.sizeof ≤ m x.sizeof)
+    (b₂ x.sizeof) x) :
+  time_bound c.fix (λ t, (b₁ (m t)) * (b₂ t) + 1) :=
 begin
-  intros n v hnv,
-  have : (c.fix.time v).dom,
-  { rw [time_dom_iff_eval_dom, code_fix_eval], simpa using dom_of_fix_bounded_terminates (hb₂ v), },
-  rw part.dom_iff_mem at this, rcases this with ⟨t, ht⟩, use [t, ht],
-  simp only [code_fix_time, part.mem_map_iff, part.map_eq_map] at ht, rcases ht with ⟨t', ht, rfl⟩, dsimp only,
-  simp only [add_le_add_iff_right], -- Invariant: fix_bounded_terminates (pfun.to_fun ...) ... (b₂ x.sizeof) - t
-  refine pfun.fix_induction_invariant (λ vt : ptree × ℕ, c_invariant c (eval_dom_of_time_bound hb₁) vt.1 ((b₂ v.sizeof) - vt.2) (m v.sizeof)) ht _ _ _,
-  { simpa using hb₂ _, },
-  { rintros ⟨x₁, t₁⟩ ⟨x₂, t₂⟩ hx₁ hx₂, dsimp only,
-    simp [c_invariant], }
+  intros n v hnv, specialize hb₂ v, dsimp only, rw mul_comm,
+  apply time_bound_of_fix_bounded_terminates, swap, { rw [eval_dom_of_time_bound hb₁], },
+  refine fix_bounded_terminates_weaken _ (mono₂ hnv) hb₂,
+  intros x hx, specialize hb₁ (m v.sizeof) _ hx, rcases hb₁ with ⟨t, H, ht⟩, 
+  rw ← part.eq_some_iff at H,
+  simp [pfun.to_fun, H], exact ht.trans (mono₁ (mono₃ hnv)),
 end
 
 end time_bound_fix_lemma
