@@ -198,3 +198,34 @@ lemma time_bound_case' {c₁ c₂ : code} {b₁ b₂ : ℕ → ℕ} (hb₁ : tim
   time_bound (code.case c₁ c₂) (λ t, (b₁ t) + (b₂ t) + 1) :=
 by { apply time_bound_of_time_bound_le (time_bound_case hb₁ hb₂), intro, simp, }
 
+lemma time_fix_fun_dom_iff (f : code) (v : ptree) (t : ℕ) : (time_fix_fun f (v, t)).dom ↔ (f.eval v).dom :=
+by simp [time_fix_fun, time_dom_iff_eval_dom]
+
+lemma time_fix_frespects_self (f : code) (t : ℕ) :
+  pfun.frespects_once' (time_fix_fun f) (time_fix_fun f) (prod.map id (+t)) (+t) :=
+begin
+  rintro ⟨v, t₀⟩, split,
+  { intro h, simpa [time_fix_fun_dom_iff] using h, }, split,
+  { rintros ⟨v', t₁⟩ ha', simp [time_fix_fun, ← apply_ite part.some] at ha' ⊢,
+    rcases ha' with ⟨tc, htc, v₁, hv₁, ne_nil, rfl, rfl⟩,
+    use [tc, htc, v₁, hv₁, ne_nil, rfl], ring, },
+  { intros t₁ ht₁, simp [time_fix_fun, ← apply_ite part.some] at ht₁ ⊢, 
+    rcases ht₁ with ⟨tc, htc, v₁, hv₁, eq_nil, rfl⟩, use [tc, htc, v₁, hv₁, eq_nil], ring, },
+end
+
+lemma time_fix_fun_spec (f : code) (v : ptree) (t : ℕ) :
+  pfun.fix (time_fix_fun f) (v, t) = (+t) <$> (pfun.fix (time_fix_fun f) (v, 0)) :=
+begin
+  have := pfun.eq_val_of_frespects_once' (time_fix_frespects_self f t) (v, 0),
+  simp at this, exact this.symm,
+end
+
+lemma time_fix_spec {f : code} {v v' : ptree} {t : ℕ} 
+  (hv : v' ∈ f.eval v) (hv' : v'.left ≠ ptree.nil) (ht : t ∈ f.time v) :
+  f.fix.time v = (+t) <$> f.fix.time v'.right :=
+begin
+  have : sum.inr (v'.right, t) ∈ time_fix_fun f (v, 0),
+  { simp [time_fix_fun, ← apply_ite part.some], use [t, ht, v', hv, hv', rfl, rfl], },
+  simp [code_fix_time, pfun.fix_fwd _ _ this, time_fix_fun_spec f v'.right t, part.map_map],
+  congr, ext, ring,
+end

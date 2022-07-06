@@ -74,6 +74,10 @@ abbreviation encode_sizeof (x : α) := (encode x).sizeof
 
 section time_bound_fix_lemma
 
+lemma part.get_iff_mem_prop {δ : Type*} (x : part δ) (h : x.dom) (P : δ → Prop) :
+  P (x.get h) ↔ ∃ v ∈ x, P v :=
+by { split, { intro H, use x.get h, exact ⟨part.get_mem _, H⟩, }, rintro ⟨v, hv, hP⟩, rwa part.get_eq_of_mem hv h, }
+
 lemma time_bound_of_fix_bounded_terminates {c : code} {x : ptree}
   (hc : c.eval.dom = set.univ) {T J : ℕ}
   (ht : fix_bounded_terminates (pfun.to_fun (eval_fix_fun c) (by rwa eval_fix_fun_dom_eq_dom))
@@ -87,13 +91,28 @@ begin
   rw part.dom_iff_mem at this, cases this with t H, use [t, H],
   rw fix_bounded_terminates_iff at ht, cases ht with ht₁ ht₂,
   cases fv : pfun.to_fun (eval_fix_fun c) (by rwa eval_fix_fun_dom_eq_dom) x with y x',
-  { clear ih ht₂, simp [pfun.to_fun, eval_fix_fun] at fv, simp [pfun.to_fun, code_fix_time] at H,
+  all_goals
+  { simp [pfun.to_fun, code_fix_time] at H,
     rcases H with ⟨t', ht', rfl⟩,
-    cases fv with fv₁ fv₂,
-    simp only [add_le_add_iff_right],
-    have : ∃ t'', sum.inl t'' ∈ time_fix_fun c (x, 0),
-    { use (c.time.to_fun (by rwa time_dom_eq_eval_dom) x), 
-      simp [time_fix_fun], } }
+    have ht₁' : ∃ t₁ ∈ c.time x, t₁ ≤ T := by { rw ← part.get_iff_mem_prop, exact ht₁, },
+    clear ht₁, rcases ht₁' with ⟨t₁, ht₁, t₁_le⟩,
+    simp only [add_le_add_iff_right], },
+  { clear ih ht₂, simp [pfun.to_fun, eval_fix_fun] at fv, cases fv with fv₁ fv₂,
+    have : (c.eval x).dom, { change x ∈ c.eval.dom, rw hc, trivial, }, rw part.dom_iff_mem at this, cases this with fv hfv,
+    rw part.get_eq_of_mem hfv _ at fv₁ fv₂,
+    have : sum.inl t₁ ∈ time_fix_fun c (x, 0),
+    { simp [time_fix_fun], use [t₁, ht₁, fv, hfv], simp [fv₁], },
+    cases part.mem_unique (pfun.fix_stop _ this) ht', refine t₁_le.trans _, rw nat.succ_eq_add_one, nlinarith only, },
+  specialize ht₂ _ fv, specialize ih ht₂,
+  simp [pfun.to_fun, eval_fix_fun] at fv, cases fv with fv₁ fv₂,
+  have : (c.eval x).dom, { change x ∈ c.eval.dom, rw hc, trivial, }, rw part.dom_iff_mem at this, cases this with fv hfv,
+  rw part.get_eq_of_mem hfv _ at fv₁ fv₂,
+  have := time_fix_spec hfv fv₁ ht₁, subst fv₂, rw code_fix_time at this,
+  rw ← part.eq_some_iff at ht', rw [ht', @comm _ (=)] at this, simp [part.eq_some_iff] at this,
+  rcases this with ⟨t, ht, Ht⟩, rcases ih with ⟨t, ht₂, Ht₂⟩, cases part.mem_unique ht ht₂,
+  suffices : t' + 1 ≤ j * T + T + 1, { simpa [nat.succ_mul] using this, },
+  rw ← Ht, nlinarith only [Ht₂, t₁_le],
+  -- have : sum.inr
 end
 
 
@@ -119,8 +138,6 @@ begin
 end
 
 end time_bound_fix_lemma
-
-#exit
 
 lemma polytime_fix_bounded (p q : polynomial ℕ) (f : α → β ⊕ α) (g : α → β)
   (hf : ∀ x, g x ∈ fix_bounded_while f (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof x)) (p.eval (encode_sizeof x)) x) :
