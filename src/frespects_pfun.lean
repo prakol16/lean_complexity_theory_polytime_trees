@@ -137,3 +137,20 @@ begin
 end
 
 end pfun
+
+namespace pfun
+
+@[elab_as_eliminator]
+def fix_induction_invariant {α β : Type*} {f : α →. β ⊕ α} {x : α} {y : β} {P : β → Sort*} (Q : α → Sort*) (h : y ∈ f.fix x)
+  (hb₁ : Q x) (ih : ∀ x' x'', Q x' → sum.inr x'' ∈ f x' → Q x'') (hb₂ : ∀ x' y', Q x' → sum.inl y' ∈ f x' → P y') : P y :=
+begin
+  suffices : ∀ y ∈ f.fix x, Q x → P y, { exact this _ h hb₁, },
+  apply fix_induction' _ _ h; clear h hb₁ x,
+  { intros a ha a' ha' hqa, cases part.mem_unique ha' (fix_stop _ ha),
+    apply hb₂; assumption, },
+  intros a a' ha' ha ih' y' hy' hqa,
+  rw fix_fwd _ _ ha at hy', cases part.mem_unique ha' hy',
+  apply ih' _ hy', apply ih _ _ hqa ha,
+end 
+
+end pfun

@@ -76,6 +76,9 @@ begin
     exact time_frespects_once_eval_aux f ih, }
 end
 
+lemma time_dom_eq_eval_dom (c : code) : c.time.dom = c.eval.dom :=
+by { ext, apply time_dom_iff_eval_dom, }
+
 lemma time_frespects_once_eval (f : code) : pfun.frespects_once (time_fix_fun f) (eval_fix_fun f) prod.fst :=
 by { apply time_frespects_once_eval_aux, simp [time_dom_iff_eval_dom], }
 
