@@ -1,4 +1,5 @@
 import polycodable
+import npolynomial
 
 variables {α β : Type*}
 
@@ -23,29 +24,40 @@ begin
   cases hf : f x; simp [fix_bounded_while, H],
 end
 
-private lemma fix_bounded_terminates_weaken_prop {f : α → β ⊕ α} {P Q : α → Prop} {n : ℕ} {x₀ : α} [decidable_pred P] [decidable_pred Q]
-  (h : ∀ x, P x → Q x) (hb : fix_bounded_terminates f P n x₀) : fix_bounded_terminates f Q n x₀ :=
+private lemma fix_bounded_while_weaken_prop {f : α → β ⊕ α} {P Q : α → Prop} {n : ℕ} {x₀ : α} {y : β} [decidable_pred P] [decidable_pred Q]
+  (h : ∀ x, P x → Q x) (hb : y ∈ fix_bounded_while f P n x₀) : y ∈ fix_bounded_while f Q n x₀ :=
 begin
   induction n with n ih generalizing x₀,
   { contradiction, },
-  rw fix_bounded_terminates_iff at hb ⊢,
-  exact ⟨h _ hb.1, λ x hx, ih (hb.2 _ hx)⟩,
+  simp [fix_bounded_while] at ⊢ hb, 
+  split_ifs at hb with H, swap, { contradiction, }, simp [h _ H],
+  cases (f x₀) with v; simp [fix_bounded_while] at ⊢ hb,
+  { assumption, }, { exact ih hb, },
 end
 
-private lemma fix_bounded_terminates_weaken_ind {f : α → β ⊕ α} {P : α → Prop} {m n : ℕ} {x₀ : α} [decidable_pred P]
-  (hmn : m ≤ n) (hb : fix_bounded_terminates f P m x₀) : fix_bounded_terminates f P n x₀ :=
+private lemma fix_bounded_while_weaken_ind {f : α → β ⊕ α} {P : α → Prop} {m n : ℕ} {x₀ : α} {y : β} [decidable_pred P]
+  (hmn : m ≤ n) (hb : y ∈ fix_bounded_while f P m x₀) : y ∈ fix_bounded_while f P n x₀ :=
 begin
   induction n with n ih generalizing m x₀,
   { simp at hmn, subst hmn, contradiction, },
   cases m, { contradiction, },
   rw nat.succ_le_succ_iff at hmn,
-  rw fix_bounded_terminates_iff at hb ⊢,
-  exact ⟨hb.1, λ x' hx, ih hmn (hb.2 _ hx)⟩,
+  simp [fix_bounded_while] at ⊢ hb,
+  split_ifs at ⊢ hb, swap, { contradiction, },
+  cases (f x₀) with v; simp [fix_bounded_while] at ⊢ hb,
+  { assumption, }, { exact ih hmn hb, }
 end
+
+lemma fix_bounded_while_weaken {f : α → β ⊕ α} {P Q : α → Prop} {m n : ℕ} {x₀ : α} {y : β} [decidable_pred P] [decidable_pred Q]
+  (hp : ∀ x, P x → Q x) (hmn : m ≤ n) (hb : y ∈ fix_bounded_while f P m x₀) : y ∈ fix_bounded_while f Q n x₀ :=
+fix_bounded_while_weaken_ind hmn (fix_bounded_while_weaken_prop hp hb)
 
 lemma fix_bounded_terminates_weaken {f : α → β ⊕ α} {P Q : α → Prop} {m n : ℕ} {x₀ : α} [decidable_pred P] [decidable_pred Q]
   (hp : ∀ x, P x → Q x) (hmn : m ≤ n) (hb : fix_bounded_terminates f P m x₀) : fix_bounded_terminates f Q n x₀ :=
-fix_bounded_terminates_weaken_ind hmn (fix_bounded_terminates_weaken_prop hp hb)
+begin
+  simp only [fix_bounded_terminates, option.is_some_iff_exists] at ⊢ hb,
+  rcases hb with ⟨y, hy⟩, use y, exact fix_bounded_while_weaken hp hmn hy,
+end
 
 lemma fix_eq_fix_bounded {f : α → β ⊕ α} {P : α → Prop} [decidable_pred P] {x : α} {y : β} {i : ℕ}
   (h : y ∈ fix_bounded_while f P i x) : y ∈ pfun.fix (f : α →. β ⊕ α) x :=
@@ -155,24 +167,66 @@ end
 
 end time_bound_fix_lemma
 
-lemma polytime_fix_bounded (p q : polynomial ℕ) (f : α → β ⊕ α) (g : α → β)
-  (hf : ∀ x, g x ∈ fix_bounded_while f (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof x)) (p.eval (encode_sizeof x)) x) :
-  polytime_fun f → polytime_fun g :=
+-- TODO: This is currently very ugly
+lemma fix_bounded_terminates_norm_code_aux {f : α → β ⊕ α} {c : code} (hc : ∀ x : α, c.eval (encode x) = part.some (encode $ f x)) (hd : c.eval.dom = set.univ)
+  (P : ptree → Prop) [decidable_pred P] (i : ℕ) (x : α) :
+  fix_bounded_terminates (pfun.to_fun (eval_fix_fun c) (by rw [eval_fix_fun_dom_eq_dom, hd])) P i (encode x) ↔
+  fix_bounded_terminates f (λ y, P (encode y)) i x :=
 begin
-  rintro ⟨c, pc, s⟩,
-  use code.fix c, split, swap,
-  { intro x, simp only [part.eq_some_iff], rw code_fix_eq_pfun_fix' s, simpa using fix_eq_fix_bounded (hf x), },
-  -- Max output value: q(x), max time per step: pc(q(x)), max time: p(x)pc(q(x))
+  induction i with i ih generalizing x, { split; intro; contradiction, },
+  simp [fix_bounded_terminates_iff], intro _,
+  split,
+  { intros h x' hx', specialize h (encode x') _, 
+    { simp [pfun.to_fun, hc, hx'], split; trivial, },
+    exact (ih x').mp h, },
+  { intros h x' hx', simp [pfun.to_fun, hc] at hx',
+    cases H : f x with val, { exfalso, cases hx' with l, rw H at l, contradiction, },
+    rw H at hx', have : x' = encode val := hx'.2, subst this,
+    rw ih, exact h _ H, }
 end
 
--- lemma polytime_fix_bounded (p : polynomial ℕ) (f : α → β ⊕ α) (g : α → β)
---   (hf : ∀ x, g x ∈ fix_bounded_iter f (p.eval (encode_sizeof x)) x) 
---   (bg : ∃ C : ℕ, ∀ x, encode_sizeof (f x) ≤ (encode_sizeof x) + C) : polytime_fun f → polytime_fun g :=
--- begin
---   rintro ⟨c, pc, s⟩,
---   use code.fix c, split, swap,
---   { intro x, simp only [part.eq_some_iff], rw code_fix_eq_pfun_fix' s, simpa using fix_eq_fix_bounded (hf x), },
-  
--- end
+lemma fix_bounded_terminates_norm_code {f : α → β ⊕ α} (hf : polytime_fun f) (P : ptree → ptree → Prop) [decidable_rel P] (i : ptree → ℕ) 
+  (start₀ : ∀ x, P x x) (start₁ : ∀ x, 0 < i x) :
+  (∀ (x : ptree), fix_bounded_terminates (pfun.to_fun (eval_fix_fun hf.norm_code) (by rw [eval_fix_fun_dom_eq_dom, hf.norm_code_dom])) (P x) (i x) x) ↔
+  ∀ (x : α), fix_bounded_terminates f (λ y, P (encode x) (encode y)) (i (encode x)) x :=
+begin
+  split,
+  { intros h x, rw ← fix_bounded_terminates_norm_code_aux hf.norm_code_eval, { exact h _, }, },
+  intros h x,
+  by_cases H : x ∈ set.range (@encode α _),
+  { rcases H with ⟨v, rfl⟩, rw fix_bounded_terminates_norm_code_aux hf.norm_code_eval, exact h _, },
+  specialize start₀ x, specialize start₁ x, cases (i x), { exfalso, simpa using start₁, },
+  rw fix_bounded_terminates_iff, refine ⟨start₀, _⟩,
+  intros x' h₂, exfalso, simpa [pfun.to_fun, hf.norm_code_invalid H] using h₂,
+end
+
+lemma polytime_fix_bounded_aux (p q : polynomial ℕ) (hpq₀ : ∀ n, 0 < p.eval n) (hpq₁ : ∀ n, n ≤ q.eval n) (f : α → β ⊕ α) (g : α → β)
+  (hg : ∀ x, g x ∈ fix_bounded_while f (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof x)) (p.eval (encode_sizeof x)) x)
+  (hf : polytime_fun f) : polytime_fun g :=
+begin
+  use code.fix hf.norm_code, split, swap,
+  { intro x, simp only [part.eq_some_iff, ite_eval], rw code_fix_eq_pfun_fix' hf.norm_code_eval, simpa using fix_eq_fix_bounded (hg x), },
+  rcases hf.polytime_norm_code with ⟨pc, hpc⟩,
+  use (pc.comp q) * p + 1,
+  { simp,
+    apply time_bound_fix hpc (monotone_polynomial_nat pc) (monotone_polynomial_nat p) (monotone_polynomial_nat q),
+    rw fix_bounded_terminates_norm_code hf, 
+    { intro x, simp only [fix_bounded_terminates, option.is_some_iff_exists], use (g x),
+      exact hg x, },
+    { intro x, apply hpq₁, },
+    intro, apply hpq₀, },
+end
+
+lemma polytime_fix_bounded (p q : polynomial ℕ) (f : α → β ⊕ α) (g : α → β)
+  (hg : ∀ x, g x ∈ fix_bounded_while f (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof x)) (p.eval (encode_sizeof x)) x)
+  (hf : polytime_fun f) : polytime_fun g :=
+begin
+  apply polytime_fix_bounded_aux (p+1) (q+polynomial.monomial 1 1) _ _ f g _ hf,
+  { intro n, simp, },
+  { intro n, simp, },
+  intro x, apply fix_bounded_while_weaken _ _ (hg x),
+  { intros x h, refine h.trans _, simp, },
+  { simp, },
+end
 
 end poly

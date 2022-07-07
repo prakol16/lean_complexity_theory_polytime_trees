@@ -29,7 +29,7 @@ do  t' ← f.time vt.1,
 lemma code_fix_time (f : code) (v : ptree) : (code.fix f).time v = (+1) <$> pfun.fix (time_fix_fun f) (v, 0) := rfl
 lemma code_fix_eval (f : code) : (code.fix f).eval = pfun.fix (eval_fix_fun f) := rfl
 
-@[simp] lemma ite_dom {α : Type*} (c : Prop) [decidable c] (x y : part α) :
+@[simp] lemma part.ite_dom {α : Type*} (c : Prop) [decidable c] (x y : part α) :
   (if c then x else y).dom ↔ if c then x.dom else y.dom :=
 by split_ifs; refl
 
@@ -197,6 +197,19 @@ end
 lemma time_bound_case' {c₁ c₂ : code} {b₁ b₂ : ℕ → ℕ} (hb₁ : time_bound c₁ b₁) (hb₂ : time_bound c₂ b₂) :
   time_bound (code.case c₁ c₂) (λ t, (b₁ t) + (b₂ t) + 1) :=
 by { apply time_bound_of_time_bound_le (time_bound_case hb₁ hb₂), intro, simp, }
+
+lemma time_bound_case_precise {c₁ c₂ : code} {b₁ b₂ : ℕ → ℕ} (m₁ : monotone b₁) (m₂ : monotone b₂)
+  (hb₁ : ∀ x : ptree, x.left = ptree.nil → ∃ t ∈ c₁.time x.right, t ≤ b₁ x.sizeof)
+  (hb₂ : ∀ x : ptree, x.left ≠ ptree.nil → ∃ t ∈ c₂.time x.right, t ≤ b₂ x.sizeof) :
+  time_bound (code.case c₁ c₂) (λ n, max (b₁ n) (b₂ n) + 1) :=
+begin
+  intros n v hnv, 
+  by_cases H : v.left = ptree.nil,
+  { specialize hb₁ v H, rcases hb₁ with ⟨t, ht, s⟩, use t + 1, split,
+    { simpa [code.time, H], }, { simp, left, refine s.trans _, apply m₁ hnv, } },
+  { specialize hb₂ v H, rcases hb₂ with ⟨t, ht, s⟩, use t + 1, split,
+    { simpa [code.time, H], }, { simp, right, refine s.trans _, apply m₂ hnv, } }
+end
 
 lemma time_fix_fun_dom_iff (f : code) (v : ptree) (t : ℕ) : (time_fix_fun f (v, t)).dom ↔ (f.eval v).dom :=
 by simp [time_fix_fun, time_dom_iff_eval_dom]

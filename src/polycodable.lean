@@ -26,6 +26,7 @@ def polydecidable (P : α → Prop) : Prop :=
 @[simp] lemma polydecidable_aux_iff (P : ptree → Prop) : polydecidable_aux P ↔ polydecidable P :=
 ⟨λ ⟨c, pc, sound⟩, ⟨c, pc, sound⟩, λ ⟨c, pc, sound⟩, ⟨c, pc, sound⟩⟩
 
+@[irreducible]
 lemma mem_poly (α : Type*) [polycodable α] : polydecidable (∈ set.range (@encode α _)) := polycodable.mem_poly'
 
 def polytime_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) :=
@@ -192,7 +193,6 @@ end
 
 end bool
 
-
 def polycodable.mk' {δ : Type*} (encode : δ ↪ α) (mem_poly : polydecidable (∈ set.range encode)) : polycodable δ :=
 { encode := encode.trans polycodable.encode,
   mem_poly' :=
@@ -216,6 +216,33 @@ by { haveI : polycodable δ := polycodable.mk' encode mem_poly, use [code.id, po
 
 lemma polytime_fun.decode' {δ : Type*} (encode : δ ↪ α) (mem_poly : polydecidable (∈ set.range encode))
   {f : β → δ} (pg : polytime_fun (encode ∘ f)) : @polytime_fun β δ _ (polycodable.mk' encode mem_poly) f := pg
+
+def polycodable.of_equiv {δ : Type*} (eqv : δ ≃ α) : polycodable δ :=
+polycodable.mk' eqv.to_embedding
+(by simpa [equiv.to_embedding] using polydecidable.true)
+
+lemma polytime_fun.encode_eqv {δ : Type*} (eqv : δ ≃ α) :
+  @polytime_fun δ α (polycodable.of_equiv eqv) _ eqv :=
+polytime_fun.encode' eqv.to_embedding _
+
+lemma polytime_fun.decode_eqv {δ : Type*} (eqv : δ ≃ α) :
+  @polytime_fun α δ _ (polycodable.of_equiv eqv) eqv.symm :=
+polytime_fun.decode' eqv.to_embedding _ (by simpa [equiv.to_embedding] using polytime_fun.id)
+
+section unit
+
+@[simp] lemma range_punit {δ : Type*} (f : punit → δ) : set.range f = { f punit.star } :=
+begin
+  ext x, split,
+  { rintro ⟨u, hu⟩, rw (show u = punit.star, by simp) at hu, rw hu, simp, },
+  rintro ⟨rfl⟩, exact set.mem_range_self _,
+end
+
+instance : polycodable unit :=
+{ encode := function.embedding.punit ptree.nil,
+  mem_poly' := by { simp [function.embedding.punit], apply polydecidable.eq_const, } }
+
+end unit
 
 section sum
 
@@ -257,7 +284,7 @@ begin
   apply polytime_fun.pair, apply polytime_fun.const, apply polytime_fun.encode,
 end
 
-lemma polytime_fun.sum_elim {δ : Type} [polycodable δ] 
+lemma polytime_fun.sum_elim {δ : Type*} [polycodable δ] 
   {f : α → β ⊕ γ} {g : α → β → δ} {h : α → γ → δ} (hf : polytime_fun f) (hg : polytime_fun₂ g) (hh : polytime_fun₂ h) :
   polytime_fun (λ x, (f x).elim (g x) (h x)) :=
 begin
@@ -276,6 +303,70 @@ begin
 end
 
 end sum
+
+section option
+
+instance : polycodable (option α) :=
+polycodable.of_equiv (equiv.option_equiv_sum_punit.{0} α)
+
+lemma polytime_fun.option_equiv_sum_unit : polytime_fun (equiv.option_equiv_sum_punit.{0} α) :=
+polytime_fun.encode_eqv _
+
+lemma polytime_fun.option_equiv_sum_unit_symm : polytime_fun (equiv.option_equiv_sum_punit.{0} α).symm :=
+polytime_fun.decode_eqv _
+
+lemma polytime_fun.some : polytime_fun (@some α) :=
+begin
+  change polytime_fun (λ x, (equiv.option_equiv_sum_punit.{0} α).symm (sum.inl x)),
+  apply polytime_fun.comp polytime_fun.option_equiv_sum_unit_symm polytime_fun.sum_inl,
+end
+
+lemma polytime_fun.option_elim {f : α → option β} {g : α → β → γ} {h : α → γ}
+  (hf : polytime_fun f) (hg : polytime_fun₂ g) (hh : polytime_fun h) :
+  polytime_fun (λ x, (f x).elim (h x) (g x)) :=
+begin
+  convert_to polytime_fun (λ x, ((equiv.option_equiv_sum_punit.{0} β) (f x)).elim (λ y, g x y) (λ _, h x)),
+  { ext x, cases f x; simp, },
+  apply polytime_fun.sum_elim, apply polytime_fun.comp polytime_fun.option_equiv_sum_unit hf,
+  exact hg,
+  apply polytime_fun.comp hh polytime_fun.prod_fst,
+end
+
+end option
+
+noncomputable def polytime_fun.norm_code {f : α → β} (hf : polytime_fun f) :=
+code.ite (mem_poly α).some (Exists.some hf) code.nil
+
+lemma polytime_fun.polytime_norm_code {f : α → β} (hf : polytime_fun f) :
+  polytime hf.norm_code :=
+polytime_ite (mem_poly α).some_spec.some hf.some_spec.some polytime_nil
+
+lemma polytime_fun.norm_code_dom {f : α → β} (hf : polytime_fun f) :
+  hf.norm_code.eval.dom = set.univ := hf.polytime_norm_code.dom_univ
+
+@[simp] lemma polytime_fun.norm_code_eval {f : α → β} (hf : polytime_fun f) (x : α) :
+  hf.norm_code.eval (encode x) = part.some (encode $ f x) :=
+begin
+  obtain ⟨_, spec⟩ := Exists.some_spec hf,
+  obtain ⟨_, spec'⟩ := Exists.some_spec (mem_poly α),
+  specialize spec' (encode x),
+  simp only [iff_true, set.mem_range_self] at spec',
+  rw [ptree_encode, ← part.eq_some_iff] at spec',
+  simp only [polytime_fun.norm_code, spec x, ite_eval, code.eval, spec'],
+  simp,
+end
+
+lemma polytime_fun.norm_code_invalid {f : α → β} (hf : polytime_fun f) {x : ptree} (hx : x ∉ set.range (@encode α _)) :
+  hf.norm_code.eval x = part.some ptree.nil :=
+begin
+  obtain ⟨p, spec⟩ := Exists.some_spec (mem_poly α), specialize spec x,
+  have := p.dom_univ' x, rw [part.dom_iff_mem] at this,
+  cases this with y hy, rw ← part.eq_some_iff at hy,
+  simp only [iff_false, hx] at spec, rw [ptree_encode, hy] at spec,
+  simp at spec, rw @comm _ (=) at spec,
+  simp only [polytime_fun.norm_code, code.eval, ite_eval, hy],
+  simp only [part.bind_eq_bind, spec, part.some_inj, eq_self_iff_true, if_false, part.bind_some],
+end
 
 section list
 
@@ -316,8 +407,6 @@ begin
   { apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.prod_fst, },
   { apply polytime_fun.comp₂, apply polytime_fun.cons, apply polytime_fun.comp hf, apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, },
 end
-
-
 
 end list
 
