@@ -16,7 +16,7 @@ def fix_bounded_terminates (f : α → β ⊕ α) (P : α → Prop) [decidable_p
 lemma not_fix_bounded_terminates_zero (f : α → β ⊕ α) (P : α → Prop) [decidable_pred P] (x : α) :
   ¬fix_bounded_terminates f P 0 x := by trivial
 
-lemma fix_bounded_terminates_iff (f : α → β ⊕ α) (P : α → Prop) [decidable_pred P] (i : ℕ) (x : α) :
+@[simp] lemma fix_bounded_terminates_iff (f : α → β ⊕ α) (P : α → Prop) [decidable_pred P] (i : ℕ) (x : α) :
   (fix_bounded_terminates f P (i+1) x) ↔ P x ∧ (∀ x', f x = sum.inr x' → fix_bounded_terminates f P i x') :=
 begin
   simp only [fix_bounded_terminates, fix_bounded_while],

@@ -368,47 +368,5 @@ begin
   simp only [part.bind_eq_bind, spec, part.some_inj, eq_self_iff_true, if_false, part.bind_some],
 end
 
-section list
-
-def ptree_list_encoding_aux : polycodable (list ptree) :=
-{ encode := ⟨ptree.equiv_list.symm, λ x y hxy, by simpa using hxy⟩,
-  mem_poly' := by { convert polydecidable.true, ext x, simp, } }
-
-local attribute [instance] ptree_list_encoding_aux
-/--
-polytime fix:
-If a function increases size by at most a constant and is applied polynomially
-many times, it runs in polynomial time.
-
-Pf: Say it takes input size x --> x + C
-Time:
-p(x) + p(x+C) + p(x+2C) + ... + p(x+q(x)C)
-
--/
-
-lemma polytime_fun.head : polytime_fun (@list.head ptree _) :=
-⟨code.left, polytime_left,
-by { intro x, dunfold polycodable.encode, cases x; simp, refl, }⟩
-
-lemma polytime_fun.tail : polytime_fun (@list.tail ptree) :=
-⟨code.right, polytime_right,
-by { intro x, dunfold polycodable.encode, cases x; simp, }⟩
-
-lemma polytime_fun.cons : polytime_fun₂ (@list.cons ptree) :=
-⟨code.id, polytime_id,
-by { intro x, dunfold polycodable.encode, cases x; simp, }⟩
-
-def foldr_step (f : ptree → ptree) (l : list ptree × list ptree) : list ptree × list ptree :=
-(l.1.tail, f l.1.head :: l.2)
-
-lemma polytime_foldr_step {f : ptree → ptree} (hf : polytime_fun f) : polytime_fun (foldr_step f) :=
-begin
-  apply polytime_fun.pair,
-  { apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.prod_fst, },
-  { apply polytime_fun.comp₂, apply polytime_fun.cons, apply polytime_fun.comp hf, apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, },
-end
-
-end list
-
 end polytime_fun
 
