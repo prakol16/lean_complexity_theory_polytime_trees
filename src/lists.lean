@@ -1,4 +1,4 @@
-import polyfix
+import polyiterate
 import data.list.basic
 
 section list
@@ -31,16 +31,49 @@ lemma polytime_fun.cons : polytime_fun₂ (@list.cons ptree) :=
 ⟨code.id, polytime_id,
 by { intro x, dunfold polycodable.encode, cases x; simp, }⟩
 
-def foldr_step (f : ptree → ptree) (l : list ptree × list ptree) : list ptree ⊕ (list ptree × list ptree) :=
-if l.1 = [] then sum.inl l.2 else sum.inr (l.1.tail, f l.1.head :: l.2)
+def foldl_step (f : ptree → ptree → ptree) (x : list ptree × ptree) : list ptree × ptree := (x.1.tail, f x.2 x.1.head)
 
-lemma polytime_foldr_step {f : ptree → ptree} (hf : polytime_fun f) : polytime_fun (foldr_step f) :=
+lemma polytime_fun.foldl_step {f : ptree → ptree → ptree} (hf : polytime_fun₂ f) :
+  polytime_fun (foldl_step f) :=
+by { apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.prod_fst, apply polytime_fun.comp₂ hf, apply polytime_fun.prod_snd,  apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.prod_fst, }
+
+lemma foldl_step_iterate (f : ptree → ptree → ptree) (i : ℕ) (l : list ptree) (acc : ptree) (hi : i ≤ l.length) :
+  (foldl_step f)^[i] (l, acc) = (l.drop i, (l.take i).foldl f acc) :=
 begin
-  apply polytime_fun.ite, apply polydecidable_of_preimage_polytime (=[]), apply polytime_fun.prod_fst, apply polydecidable.eq_const,
-  apply polytime_fun.comp, apply polytime_fun.sum_inl, apply polytime_fun.prod_snd, apply polytime_fun.comp,
-  apply polytime_fun.sum_inr, apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.prod_fst,
-  apply polytime_fun.comp₂, apply polytime_fun.cons, apply polytime_fun.comp hf, apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, 
+  induction i with i ih generalizing acc l, { simp, },
+  cases l with hd tl, { exfalso, simpa using hi, },
+  specialize ih (f acc hd) tl _,
+  { simpa [nat.succ_eq_add_one] using hi, }, { simp [foldl_step, ih], },
 end
+
+open_locale classical
+noncomputable theory
+
+def foldl_halt (x : list ptree × ptree) := x.1 = []
+
+def foldl_fix_fun (f : ptree → ptree → ptree) := mk_fix_fun_of_iterate (foldl_step f) foldl_halt
+
+lemma polytime_fun.foldl_fix_fun {f : ptree → ptree → ptree} (hf : polytime_fun₂ f) : polytime_fun (foldl_fix_fun f) :=
+polytime_fun.mk_fix_fun (polytime_fun.foldl_step hf) (polydecidable_of_preimage_polytime (=[]) polytime_fun.prod_fst $ polydecidable.eq_const _)
+
+lemma foldl_fix (f : ptree → ptree → ptree) (l : list ptree) (acc : ptree) :
+  fix_bounded_while (foldl_fix_fun f) (λ x : list ptree × ptree, ∃ i ≤ l.length, l.drop i = x.1 ∧ (l.take i).foldl f acc = x.2) (l.length + 1) (l, acc) = some ([], l.foldl f acc) :=
+begin
+  have : nat.iterate (foldl_step f) l.length (l, acc) = ([], l.foldl f acc),
+  { simp [foldl_step_iterate], },
+  convert fix_bounded_while_of_iterate (foldl_step f) foldl_halt (l, acc) l.length _ _,
+  { ext ⟨x₀, x₁⟩, simp [foldl_step_iterate], split,
+    { rintro ⟨i, hi, h₀, h₁⟩, use [i, hi], simp [foldl_step_iterate, hi, h₀, h₁], },
+    rintro ⟨i, hi, h⟩, use [i, hi], simpa [foldl_step_iterate, hi] using h, },
+  { exact this.symm, }, { rw this, simp [foldl_halt], },
+  intros m hm,
+  simpa [foldl_step_iterate, le_of_lt hm, foldl_halt, list.drop_eq_nil_iff_le],
+end
+
+lemma polytime_fun.foldl {f : ptree → ptree → ptree} (hf : polytime_fun₂ f) :
+  
+
+#check list.drop
 
 lemma fix_bounded_terminates_of_invariant {α β : Type*} (f : α → β ⊕ α) {invariant : α → Prop} [decidable_pred invariant]
   (hinv : ∀ x y, invariant x → f x = sum.inr y → invariant y) {start : α} (hstart : invariant start)
@@ -64,40 +97,6 @@ begin
     simp [h.1, fix_bounded_while, H], },
   simpa [h.1, fix_bounded_while, H] using ih (h.2 _ H),
 end
-
-lemma fix_bounded_while_of_terminates' {α β : Type*} {f : α → β ⊕ α} (g : β) {P : α → Prop} [decidable_pred P]
-  {n : ℕ} {start : α} (h : fix_bounded_terminates f P n start) (hg : ∀ {x : α} {y : β}, P x → sum.inl y = f x → y = g) :
-  g ∈ fix_bounded_while f P n start :=
-by { obtain ⟨x, y, hy, hx, hinv⟩ := fix_bounded_while_of_terminates h, rwa ← hg hinv hx, }
-
-lemma foldr_step_len {f : ptree → ptree} (hf : polytime_fun f) (l : list ptree) :
-  fix_bounded_while (foldr_step f)
-  (λ x, l.length = x.1.length + x.2.length ∧
-        x.2 = ((l.take x.2.length).map f).reverse ∧
-        x.1 = l.drop x.2.length) (l.length + 1)
-  (l, []) = some (l.map f).reverse :=
-begin
-  apply fix_bounded_while_of_terminates', swap,
-  { rintros ⟨x₁, x₂⟩ y ⟨hinv₁, hinv₂, hinv₃⟩ hy, dsimp only at hinv₁ hinv₂ hinv₃,
-    simp only [foldr_step, sum_inl_eq_ite] at hy, rcases hy with ⟨rfl, rfl⟩, 
-    simp at hinv₁, simpa [← hinv₁] using hinv₂, },
-  apply fix_bounded_terminates_of_invariant,
-  { rintros ⟨x₁, x₂⟩ ⟨y₁, y₂⟩ ⟨hinv₁, hinv₂, hinv₃⟩ hy, dsimp only at *, rw @comm _ (=) at hy,
-    simp only [foldr_step, sum_inr_eq_ite, prod.mk.inj_iff] at hy, rcases hy with ⟨hx₁, rfl, rfl⟩,
-    cases x₁ with hd tl, { contradiction, }, clear hx₁,
-    split, { rw hinv₁, simp, ring, },
-    have x₂lt : x₂.length < l.length, { rw hinv₁, simp, },
-    simp only [list.drop_eq_nth_le_cons x₂lt] at hinv₃,
-    split, { simpa [list.take_succ, list.nth_le_nth x₂lt, option.to_list, ← hinv₃.1], },
-    simpa using hinv₃.2, },
-  { split; simp, },
-  { suffices : ∀ a, fix_bounded_terminates (foldr_step f) (λ _, true) (l.length + 1) (l, a), apply this,
-    induction l with hd tl ih, { intro a, simp [foldr_step], },
-    intro a, rw fix_bounded_terminates_iff,
-    simp [-fix_bounded_terminates_iff, foldr_step],
-    rintros _ _ rfl rfl, apply ih, },
-end
-
 
 
 end list
