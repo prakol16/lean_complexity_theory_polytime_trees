@@ -87,7 +87,7 @@ end
 
 lemma polytime_fun.foldl {f : ptree → ptree → ptree → ptree} {g : ptree → list ptree} {acc : ptree → ptree}
   (hf : polytime_fun₃ f) (hg : polytime_fun g) (hacc : polytime_fun acc) 
-  (hsize : polysize_fun (λ x, (g x).foldl (f x) (acc x))) :
+  (hsize : polysize_fun (λ xls : list ptree × ptree × ptree, xls.1.foldl (f xls.2.1) xls.2.2)) :
   polytime_fun (λ x, (@list.nil ptree, (g x).foldl (f x) (acc x))) :=
 begin
   cases hsize with q hq,
@@ -96,7 +96,10 @@ begin
   { have := polytime_fun.comp₂ this polytime_fun.id (polytime_fun.pair hg hacc), exact this, },
   { rintros d ⟨l, s⟩, dsimp only,
     apply fix_bounded_while_weaken _ _ (foldl_fix (f d) l s),
-    rintros ⟨l', s'⟩, dsimp only, rintros ⟨i, H, rfl, rfl⟩, sorry, sorry, },
+    { rintros ⟨l', s'⟩, dsimp only, rintros ⟨i, H, rfl, rfl⟩, 
+      specialize hq _ ⟨l.take i, d, s⟩ rfl.le, dsimp only at hq,
+      sorry, },
+    sorry, },
   { apply polytime_fun.foldl_fix_fun hf, }
 end
 
