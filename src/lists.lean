@@ -19,6 +19,8 @@ p(x) + p(x+C) + p(x+2C) + ... + p(x+q(x)C)
 
 -/
 
+lemma encode_list_def (x : list ptree) : polycodable.encode x = ptree.equiv_list.symm x := rfl
+
 lemma polytime_fun.head : polytime_fun (@list.head ptree _) :=
 ⟨code.left, polytime_left,
 by { intro x, dunfold polycodable.encode, cases x; simp, refl, }⟩
@@ -72,6 +74,30 @@ begin
 end
 
 @[simp] lemma encode_sizeof_ptree (x : ptree) : encode_sizeof x = x.sizeof := rfl
+@[simp] lemma encode_sizeof_nil : encode_sizeof ([] : list ptree) = 1 :=
+by { dunfold encode_sizeof, simp [encode_list_def], }
+@[simp] lemma encode_sizeof_cons (a : ptree) (b : list ptree) :
+  encode_sizeof (a :: b) = 1 + encode_sizeof a + encode_sizeof b :=
+by { dunfold encode_sizeof, simp [encode_list_def], }
+lemma one_le_encode_sizeof {α : Type*} [polycodable α] (x : α) :
+  1 ≤ encode_sizeof x :=
+by { dunfold encode_sizeof, cases (polycodable.encode x); simp, linarith, }
+
+@[simp] lemma encode_sizeof_append (a b : list ptree) :
+  (encode_sizeof (a ++ b) : ℤ) = ((encode_sizeof a) : ℤ) + (encode_sizeof b) - 1 :=
+by { induction a with hd tl ih, { simp, }, simp [ih], ring, }
+
+lemma encode_sizeof_le_of_infix {a b : list ptree} (h : a <:+: b) :
+  encode_sizeof a ≤ encode_sizeof b :=
+begin
+  rcases h with ⟨s, t, rfl⟩,
+  have i₁ := one_le_encode_sizeof s, have i₂ := one_le_encode_sizeof t,
+  zify at *, simp, linarith,
+end
+
+lemma len_le_encode_sizeof (a : list ptree) :
+  a.length + 1 ≤ encode_sizeof a :=
+by { induction a with hd tl ih, { simp, }, simp, linarith, }
 
 def polysize_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) : Prop :=
 ∃ p : polynomial ℕ, ∀ (n : ℕ) (x : α), encode_sizeof x ≤ n → encode_sizeof (f x) ≤ p.eval n
@@ -84,6 +110,7 @@ begin
   specialize s x, rw part.eq_some_iff at s,
   exact (eval_sizeof_le_time s ht₀).trans ht₁,
 end
+
 
 lemma polytime_fun.foldl {f : ptree → ptree → ptree → ptree} {g : ptree → list ptree} {acc : ptree → ptree}
   (hf : polytime_fun₃ f) (hg : polytime_fun g) (hacc : polytime_fun acc) 
@@ -98,8 +125,11 @@ begin
     apply fix_bounded_while_weaken _ _ (foldl_fix (f d) l s),
     { rintros ⟨l', s'⟩, dsimp only, rintros ⟨i, H, rfl, rfl⟩, 
       specialize hq _ ⟨l.take i, d, s⟩ rfl.le, dsimp only at hq,
-      sorry, },
-    sorry, },
+      simp, conv_rhs { rw [add_comm, add_assoc], }, apply le_add_of_nonneg_of_le, { exact zero_le', },
+      mono,
+      { linarith only [encode_sizeof_le_of_infix (l.drop_suffix i).is_infix], },
+      refine hq.trans _, apply monotone_polynomial_nat, simp, linarith only [encode_sizeof_le_of_infix (l.take_prefix i).is_infix], },
+    refine (len_le_encode_sizeof _).trans _, simp, linarith only, },
   { apply polytime_fun.foldl_fix_fun hf, }
 end
 

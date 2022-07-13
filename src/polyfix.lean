@@ -251,7 +251,7 @@ by { dunfold encode_sizeof, simp [polycodable.encode_tuple], }
 
 lemma polytime_fix_bounded' {δ : Type*} [polycodable δ]
   (p q : polynomial ℕ) (f : δ → α → β ⊕ α) (g : δ → α → β)
-  (hg : ∀ d x, g d x ∈ fix_bounded_while (f d) (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof x)) (p.eval (encode_sizeof x)) x)
+  (hg : ∀ d x, g d x ∈ fix_bounded_while (f d) (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof (d, x))) (p.eval (encode_sizeof (d, x))) x)
   (hf : polytime_fun₂ f) : polytime_fun₂ g :=
 begin
   classical,
@@ -260,12 +260,12 @@ begin
   rintro ⟨d, x⟩, simp only [function.uncurry_apply_pair], specialize hg d x,
   apply fix_bounded_while_weaken,
   rotate 2,
-  { rw ← fix_bounded_while_with_state f (λ x', encode_sizeof x' ≤ q.eval (encode_sizeof x)) d x (p.eval (encode_sizeof x)),
+  { rw ← fix_bounded_while_with_state f (λ x', encode_sizeof x' ≤ q.eval (encode_sizeof (d, x))) d x (p.eval (encode_sizeof (d, x))),
     convert hg, },
   { clear hg, rintro ⟨d', x'⟩ ⟨rfl, hx⟩, simp at hx ⊢, 
     conv_rhs { rw add_comm, rw add_assoc, }, simp, apply le_add_of_nonneg_of_le, exact zero_le',
-    refine hx.trans _, apply monotone_polynomial_nat, simp, },
-  { apply monotone_polynomial_nat, simp, }
+    exact hx.trans rfl.le, },
+  { refl, },
 end
 
 end poly
