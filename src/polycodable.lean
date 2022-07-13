@@ -153,10 +153,18 @@ lemma polytime_fun.pair {f : α → β} {g : α → γ} : polytime_fun f → pol
 
 def polytime_fun₂ (f : α → β → γ) : Prop := polytime_fun (function.uncurry f)
 
+def polytime_fun₃ {δ : Type*} [polycodable δ] (f : α → β → γ → δ) : Prop :=
+polytime_fun (λ x : α × β × γ, f x.1 x.2.1 x.2.2)
+
 lemma polytime_fun.comp₂ {δ : Type*} [polycodable δ] {f : α → β → γ} {g : δ → α} {h : δ → β} 
   (hf : polytime_fun₂ f) (hg : polytime_fun g) (hh : polytime_fun h) :
   polytime_fun (λ x, f (g x) (h x)) :=
 polytime_fun.comp hf (polytime_fun.pair hg hh)
+
+lemma polytime_fun.comp₃ {δ ε : Type*} [polycodable δ] [polycodable ε] {f : α → β → γ → δ} {g₁ : ε → α} {g₂ : ε → β} {g₃ : ε -> γ} 
+  (hf : polytime_fun₃ f) (hg₁ : polytime_fun g₁) (hg₂ : polytime_fun g₂) (hg₃ : polytime_fun g₃) :
+  polytime_fun (λ x, f (g₁ x) (g₂ x) (g₃ x)) :=
+polytime_fun.comp hf (polytime_fun.pair hg₁ (polytime_fun.pair hg₂ hg₃))
 
 @[simp] lemma encode_pair_encode_fst (x : α) (y : β) : encode (encode x, y) = encode (x, y) := rfl
 @[simp] lemma encode_pair_encode_snd (x : α) (y : β) : encode (x, encode y) = encode (x, y) := rfl
@@ -300,6 +308,15 @@ begin
   apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.comp, apply polytime_fun.encode,
   apply polytime_fun.pair, apply polytime_fun.id, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf,
   apply polytime_fun.comp, apply polytime_fun.polytime_to_fun, apply polytime_fun.pair, apply polytime_fun.id, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun_encode_sum, exact hf,
+end
+
+lemma polytime_fun.sum_map {δ ε : Type*} [polycodable δ] [polycodable ε]
+  {f : α → β ⊕ γ} {g : α → β → δ} {h : α → γ → ε} (hf : polytime_fun f) (hg : polytime_fun₂ g) (hh : polytime_fun₂ h) :
+  polytime_fun (λ x : α, (f x).map (g x) (h x)) :=
+begin
+  convert_to polytime_fun (λ x : α, (f x).elim (λ a : β, sum.inl (g x a)) (λ b : γ, sum.inr (h x b))),
+  { ext x, cases (f x); simp, },
+  apply polytime_fun.sum_elim hf, dsimp only [polytime_fun₂, function.uncurry], apply polytime_fun.comp, apply polytime_fun.sum_inl, exact hg, dsimp only [polytime_fun₂, function.uncurry], apply polytime_fun.comp, apply polytime_fun.sum_inr, exact hh,
 end
 
 end sum

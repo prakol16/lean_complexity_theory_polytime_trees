@@ -229,4 +229,43 @@ begin
   { simp, },
 end
 
+open_locale classical
+
+lemma fix_bounded_while_with_state {γ : Type*} (f : γ → α → β ⊕ α) (P : α → Prop) (state : γ) (start : α) (n : ℕ) :
+  fix_bounded_while (f state) P n start = 
+  @fix_bounded_while _ _ (λ x : γ × α, (f x.1 x.2).map id (prod.mk x.1)) (λ x, x.1 = state ∧ P x.2) (classical.dec_pred _) n (state, start) :=
+begin
+  induction n with n ih generalizing start,
+  { simp [fix_bounded_while], },
+  by_cases H₁ : P start,
+  { cases H₂ : f state start with val; simp [fix_bounded_while, H₁, H₂, ih], },
+  { simp [fix_bounded_while, H₁], },
+end
+
+lemma polycodable.encode_tuple (x : α) (y : β) :
+  encode (x, y) = ptree.node (encode x) (encode y) := rfl
+
+@[simp] lemma encode_sizeof_tuple (x : α) (y : β) :
+  encode_sizeof (x, y) = 1 + encode_sizeof x + encode_sizeof y :=
+by { dunfold encode_sizeof, simp [polycodable.encode_tuple], }
+
+lemma polytime_fix_bounded' {δ : Type*} [polycodable δ]
+  (p q : polynomial ℕ) (f : δ → α → β ⊕ α) (g : δ → α → β)
+  (hg : ∀ d x, g d x ∈ fix_bounded_while (f d) (λ x' : α, encode_sizeof x' ≤ q.eval (encode_sizeof x)) (p.eval (encode_sizeof x)) x)
+  (hf : polytime_fun₂ f) : polytime_fun₂ g :=
+begin
+  classical,
+  apply polytime_fix_bounded p (q+polynomial.monomial 1 1) (λ x : δ × α, (f x.1 x.2).map id (prod.mk x.1)), swap,
+  { apply polytime_fun.sum_map, exact hf, apply polytime_fun.prod_snd, apply polytime_fun.pair, apply polytime_fun.comp polytime_fun.prod_fst polytime_fun.prod_fst, apply polytime_fun.prod_snd, },
+  rintro ⟨d, x⟩, simp only [function.uncurry_apply_pair], specialize hg d x,
+  apply fix_bounded_while_weaken,
+  rotate 2,
+  { rw ← fix_bounded_while_with_state f (λ x', encode_sizeof x' ≤ q.eval (encode_sizeof x)) d x (p.eval (encode_sizeof x)),
+    convert hg, },
+  { clear hg, rintro ⟨d', x'⟩ ⟨rfl, hx⟩, simp at hx ⊢, 
+    conv_rhs { rw add_comm, rw add_assoc, }, simp, apply le_add_of_nonneg_of_le, exact zero_le',
+    refine hx.trans _, apply monotone_polynomial_nat, simp, },
+  { apply monotone_polynomial_nat, simp, }
+end
+
 end poly

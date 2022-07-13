@@ -33,9 +33,9 @@ by { intro x, dunfold polycodable.encode, cases x; simp, }⟩
 
 def foldl_step (f : ptree → ptree → ptree) (x : list ptree × ptree) : list ptree × ptree := (x.1.tail, f x.2 x.1.head)
 
-lemma polytime_fun.foldl_step {f : ptree → ptree → ptree} (hf : polytime_fun₂ f) :
-  polytime_fun (foldl_step f) :=
-by { apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.prod_fst, apply polytime_fun.comp₂ hf, apply polytime_fun.prod_snd,  apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.prod_fst, }
+lemma polytime_fun.foldl_step {f : ptree → ptree → ptree → ptree} (hf : polytime_fun₃ f) :
+  polytime_fun₂ (λ d, foldl_step (f d)) :=
+by { apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.tail, apply polytime_fun.comp, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, apply polytime_fun.comp₃ hf, apply polytime_fun.prod_fst, apply polytime_fun.comp, apply polytime_fun.prod_snd, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun.head, apply polytime_fun.comp, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, }
 
 lemma foldl_step_iterate (f : ptree → ptree → ptree) (i : ℕ) (l : list ptree) (acc : ptree) (hi : i ≤ l.length) :
   (foldl_step f)^[i] (l, acc) = (l.drop i, (l.take i).foldl f acc) :=
@@ -53,8 +53,9 @@ def foldl_halt (x : list ptree × ptree) := x.1 = []
 
 def foldl_fix_fun (f : ptree → ptree → ptree) := mk_fix_fun_of_iterate (foldl_step f) foldl_halt
 
-lemma polytime_fun.foldl_fix_fun {f : ptree → ptree → ptree} (hf : polytime_fun₂ f) : polytime_fun (foldl_fix_fun f) :=
+lemma polytime_fun.foldl_fix_fun {f : ptree → ptree → ptree → ptree} (hf : polytime_fun₃ f) : polytime_fun₂ (λ d, foldl_fix_fun (f d)) :=
 polytime_fun.mk_fix_fun (polytime_fun.foldl_step hf) (polydecidable_of_preimage_polytime (=[]) polytime_fun.prod_fst $ polydecidable.eq_const _)
+
 
 lemma foldl_fix (f : ptree → ptree → ptree) (l : list ptree) (acc : ptree) :
   fix_bounded_while (foldl_fix_fun f) (λ x : list ptree × ptree, ∃ i ≤ l.length, l.drop i = x.1 ∧ (l.take i).foldl f acc = x.2) (l.length + 1) (l, acc) = some ([], l.foldl f acc) :=
@@ -70,32 +71,33 @@ begin
   simpa [foldl_step_iterate, le_of_lt hm, foldl_halt, list.drop_eq_nil_iff_le],
 end
 
-lemma polytime_fun.foldl {f : ptree → ptree → ptree} (hf : polytime_fun₂ f) :
-  
+@[simp] lemma encode_sizeof_ptree (x : ptree) : encode_sizeof x = x.sizeof := rfl
 
-#check list.drop
+def polysize_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) : Prop :=
+∃ p : polynomial ℕ, ∀ (n : ℕ) (x : α), encode_sizeof x ≤ n → encode_sizeof (f x) ≤ p.eval n
 
-lemma fix_bounded_terminates_of_invariant {α β : Type*} (f : α → β ⊕ α) {invariant : α → Prop} [decidable_pred invariant]
-  (hinv : ∀ x y, invariant x → f x = sum.inr y → invariant y) {start : α} (hstart : invariant start)
-  {n : ℕ} (hn : fix_bounded_terminates f (λ _, true) n start) :
-  fix_bounded_terminates f invariant n start :=
+lemma polysize_of_polytime_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) (hf : polytime_fun f) :
+  polysize_fun f :=
 begin
-  induction n with n ih generalizing start, { contradiction, },
-  simp only [fix_bounded_terminates_iff] at ⊢ hn,
-  refine ⟨hstart, _⟩, intros x' hx',
-  apply ih, { apply hinv _ _ hstart hx', }, exact hn.2 _ hx',
+  obtain ⟨c, ⟨p, hp⟩, s⟩ := hf, use p, intros n x hx,
+  obtain ⟨t, ht₀, ht₁⟩ := hp n (polycodable.encode x) hx,
+  specialize s x, rw part.eq_some_iff at s,
+  exact (eval_sizeof_le_time s ht₀).trans ht₁,
 end
 
-lemma fix_bounded_while_of_terminates {α β : Type*} {f : α → β ⊕ α} {P : α → Prop} [decidable_pred P]
-  {n : ℕ} {start : α} (h : fix_bounded_terminates f P n start) :
-  ∃ (x : α) (y : β), y ∈ fix_bounded_while f P n start ∧ sum.inl y = f x ∧ P x :=
+lemma polytime_fun.foldl {f : ptree → ptree → ptree → ptree} {g : ptree → list ptree} {acc : ptree → ptree}
+  (hf : polytime_fun₃ f) (hg : polytime_fun g) (hacc : polytime_fun acc) 
+  (hsize : polysize_fun (λ x, (g x).foldl (f x) (acc x))) :
+  polytime_fun (λ x, (@list.nil ptree, (g x).foldl (f x) (acc x))) :=
 begin
-  induction n with n ih generalizing start, { contradiction, },
-  rw fix_bounded_terminates_iff at h,
-  cases H : f start with val,
-  { refine ⟨start, val, _, H.symm, h.1⟩,
-    simp [h.1, fix_bounded_while, H], },
-  simpa [h.1, fix_bounded_while, H] using ih (h.2 _ H),
+  cases hsize with q hq,
+  have := polytime_fix_bounded' (polynomial.monomial 1 1) (q + polynomial.monomial 1 1)
+    (λ d, foldl_fix_fun (f d)) (λ d x, ([], x.1.foldl (f d) x.2)) _ _,
+  { have := polytime_fun.comp₂ this polytime_fun.id (polytime_fun.pair hg hacc), exact this, },
+  { rintros d ⟨l, s⟩, dsimp only,
+    apply fix_bounded_while_weaken _ _ (foldl_fix (f d) l s),
+    rintros ⟨l', s'⟩, dsimp only, rintros ⟨i, H, rfl, rfl⟩, sorry, sorry, },
+  { apply polytime_fun.foldl_fix_fun hf, }
 end
 
 

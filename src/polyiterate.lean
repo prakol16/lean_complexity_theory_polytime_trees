@@ -5,9 +5,12 @@ def mk_fix_fun_of_iterate (f : α → α) (halt : α → Prop) [decidable_pred h
   α → α ⊕ α :=
 λ x, if halt x then sum.inl x else sum.inr (f x)
 
-lemma polytime_fun.mk_fix_fun {α : Type*} [polycodable α] {f : α → α} (hf : polytime_fun f) {halt : α → Prop} [decidable_pred halt] (hhalt : polydecidable halt) :
-  polytime_fun (mk_fix_fun_of_iterate f halt) :=
-by { apply polytime_fun.ite hhalt, apply polytime_fun.sum_inl, apply polytime_fun.comp, apply polytime_fun.sum_inr, exact hf, }
+lemma polytime_fun.mk_fix_fun {α β : Type*} [polycodable α] [polycodable β] {f : β → α → α} (hf : polytime_fun₂ f) {halt : α → Prop} [decidable_pred halt] (hhalt : polydecidable halt) :
+  polytime_fun₂ (λ d, mk_fix_fun_of_iterate (f d) halt) :=
+begin
+  dunfold polytime_fun₂ function.uncurry mk_fix_fun_of_iterate, dsimp only,
+  apply polytime_fun.ite, apply polydecidable_of_preimage_polytime halt, apply polytime_fun.prod_snd, exact hhalt, apply polytime_fun.comp, apply polytime_fun.sum_inl, apply polytime_fun.prod_snd, apply polytime_fun.comp, apply polytime_fun.sum_inr, apply polytime_fun.comp₂ hf, apply polytime_fun.prod_fst, apply polytime_fun.prod_snd, 
+end
 
 open_locale classical
 
