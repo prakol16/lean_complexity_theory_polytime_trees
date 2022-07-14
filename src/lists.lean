@@ -8,16 +8,6 @@ def ptree_list_encoding_aux : polycodable (list ptree) :=
   mem_poly' := by { convert polydecidable.true, ext x, simp, } }
 
 local attribute [instance] ptree_list_encoding_aux
-/--
-polytime fix:
-If a function increases size by at most a constant and is applied polynomially
-many times, it runs in polynomial time.
-
-Pf: Say it takes input size x --> x + C
-Time:
-p(x) + p(x+C) + p(x+2C) + ... + p(x+q(x)C)
-
--/
 
 lemma encode_list_def (x : list ptree) : polycodable.encode x = ptree.equiv_list.symm x := rfl
 
@@ -112,7 +102,7 @@ begin
 end
 
 
-lemma polytime_fun.foldl {f : ptree → ptree → ptree → ptree} {g : ptree → list ptree} {acc : ptree → ptree}
+lemma polytime_fun.foldl' {f : ptree → ptree → ptree → ptree} {g : ptree → list ptree} {acc : ptree → ptree}
   (hf : polytime_fun₃ f) (hg : polytime_fun g) (hacc : polytime_fun acc) 
   (hsize : polysize_fun (λ xls : list ptree × ptree × ptree, xls.1.foldl (f xls.2.1) xls.2.2)) :
   polytime_fun (λ x, (@list.nil ptree, (g x).foldl (f x) (acc x))) :=
@@ -133,5 +123,62 @@ begin
   { apply polytime_fun.foldl_fix_fun hf, }
 end
 
+open polycodable (encode)
+variables {α β : Type*} [polycodable α] [polycodable β]
+def polycodable.decode [nonempty α] : ptree → α :=
+function.inv_fun (@encode α _)
+
+@[simp] lemma polycodable.decode_encode (x : α) : @polycodable.decode _ _ ⟨x⟩ (encode x) = x :=
+by { haveI : nonempty α := ⟨x⟩, exact function.left_inverse_inv_fun (function.embedding.injective _) x }
+
+lemma polytime_fun.polydecode [nonempty α] : polytime_fun (@polycodable.decode α _ _) :=
+begin
+  apply polytime_fun.decode,
+  convert_to polytime_fun (λ x : ptree, if x ∈ set.range (@encode α _) then x else (encode $ classical.arbitrary α)),
+  { ext x, split_ifs with h; simp [polycodable.decode],
+    { exact function.inv_fun_eq h }, { exact function.inv_fun_neg h, }, },
+  exact polytime_fun.ite (mem_poly α) polytime_fun.id (polytime_fun.const _),
+end
+
+lemma foldl_encode_comm (f : α → ptree → α) (acc : α) (l : list ptree) :
+  encode (l.foldl f acc) = l.foldl (λ a x, encode $ f (@polycodable.decode _ _ ⟨acc⟩ a) x) (encode acc) :=
+begin
+  induction l with hd tl ih generalizing acc, { simp, },
+  simp [ih],
+end
+
+lemma polytime_fun.foldl 
+  {f : α → β → ptree → β} {g : α → list ptree} {acc : α → β}
+  (hf : polytime_fun₃ f) (hg : polytime_fun g) (hacc : polytime_fun acc)
+  (hsize : polysize_fun (λ xls : list ptree × α × β, xls.1.foldl (f xls.2.1) xls.2.2)) :
+  polytime_fun (λ x, (g x).foldl (f x) (acc x)) :=
+begin
+  change polytime_fun (λ x, (@list.nil ptree, (g x).foldl (f x) (acc x)).snd),
+  apply polytime_fun.comp polytime_fun.prod_snd, swap, { apply_instance, /- For some reason Lean decided not to infer this instance -/ },
+  apply polytime_fun.decode, simp [function.comp],
+  sorry,
+  -- convert_to polytime_fun (λ x, (@list.nil ptree, (g x).foldl )) 
+end
+
+lemma list.all_eq_foldl {α : Type*} (P : α → bool) (l : list α) :
+  l.all P = l.foldl (λ r a, r && P a) tt :=
+begin
+  have : ∀ l : list α, l.foldl (λ r a, r && P a) ff = ff,
+  { clear l, intro l, induction l; simp [*], },
+  induction l with hd tl ih, { simp, }, cases h : P hd; simp [*],
+end
+
+lemma polytime_fun.list_all {P : ptree → bool} (hP : polytime_fun P) :
+  polytime_fun (λ l : list ptree, l.all P) :=
+begin
+  convert_to polytime_fun (λ l : list ptree, l.foldl (λ r a, r && P a) tt),
+  { ext l, exact list.all_eq_foldl _ _, },
+
+end
+
+#check bool.band_comm
+#check list.foldr_eq_of_comm'
+
+-- local attribute [-instance] ptree_list_encoding_aux
 
 end list
