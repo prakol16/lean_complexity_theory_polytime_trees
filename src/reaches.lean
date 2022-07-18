@@ -2,6 +2,16 @@ import data.pfun
 import logic.relation
 import logic.function.iterate
 
+namespace option
+
+@[simp] lemma map_eq_some'_symm {α β : Type*} (f : α → β) (x : option α) (y : β) :
+  some y = x.map f ↔ ∃ a, x = some a ∧ f a = y := by { cases x; simp, exact comm, }
+
+@[simp] lemma map_eq_none'_symm {α β : Type*} (f : α → β) (x : option α) :
+  none = x.map f ↔ none = x := by cases x; simp
+
+end option
+
 namespace pfun
 
 /-- Restrict with the intersection of a set -/
@@ -54,6 +64,7 @@ theorem reaches_of_invariant {σ} {f : σ →. option σ} (S : set σ) (hS : ∀
   {x y} (hx : x ∈ S) (hf : reaches f x y) : reaches (f.res_inter S) x y :=
 begin
   induction hf using relation.refl_trans_gen.head_induction_on with x' y' hx' hy' ih, { refl, },
+  rcases hx' with ⟨y, hy, rfl⟩,
   apply reaches.trans (reaches_fwd _) (ih _),
   { simp only [pfun.mem_res_inter], exact ⟨hx, hx'⟩, }, { exact hS hx hx', }
 end
@@ -329,32 +340,37 @@ begin
   simp at this ⊢, rwa part.get_eq_iff_mem,
 end
 
-def with_time {σ} (f : σ →. option σ) : ℕ × σ →. option (ℕ × σ) :=
-λ tx, (f tx.2).map $ λ x, x.map (λ x', (tx.1+1, x')) 
+section track_with
+variables {σ α : Type} (f : σ →. option σ) (t : σ →. ℕ)
 
-theorem with_time_frespects {σ} (f : σ →. option σ) :
-  frespects (with_time f) f prod.snd :=
-{ dom_of_dom := λ a, by simp [with_time],
-  some_of_some := λ ⟨t₁, a⟩ ⟨t₂, b⟩ h, 
+def with_time : ℕ × σ →. option (ℕ × σ) :=
+λ tx, do r₁ ← f tx.2, r₂ ← t tx.2, part.some (r₁.map $ λ r₁', (tx.1 + r₂, r₁'))
+
+theorem with_time_respects (ht : ∀ x, (t x).dom ↔ (f x).dom) : frespects (with_time f t) f prod.snd :=
+{ dom_of_dom := λ a, by simp [with_time, ht],
+  some_of_some := λ ⟨a₁, x₁⟩ ⟨a₂, x₂⟩ h, by { apply reaches₁_single, simp [with_time] at h, rcases h with ⟨_, h, _, _, rfl, rfl⟩, exact h, },
+  none_of_none := λ ⟨a, x⟩, by { simp [with_time], exact λ h _ _, h, } }
+
+theorem with_time_respects_self (n : ℕ) : frespects (with_time f t) (with_time f t) (prod.map (+n) id) :=
+{ dom_of_dom := λ a, by { simp [with_time], exact and.intro, },
+  some_of_some := λ ⟨a₁, x₁⟩ ⟨a₂, x₂⟩ h, 
 begin
   apply reaches₁_single,
-  simp [with_time] at h,
-  rcases h with ⟨b', h, rfl, _⟩,
-  exact h,
+  simp [with_time] at h ⊢,
+  rcases h with ⟨a, ha, t, ht₁, rfl, rfl⟩,
+  exact ⟨_, ha, t, ht₁, rfl, by ac_refl⟩,
 end,
-  none_of_none := λ ⟨t, a⟩, by simp [with_time] }
+  none_of_none := by { simp [with_time], tauto, } }
 
-theorem with_time_frespects_self {σ} (f : σ →. option σ) (n : ℕ) :
-  frespects (with_time f) (with_time f) (prod.map (+n) id) :=
-{ dom_of_dom := λ a, by simp [with_time],
-  some_of_some := λ ⟨t₁, a⟩ ⟨t₂, b⟩ h, 
+def time_iter : σ →. ℕ :=
+λ s, (eval (with_time f t) (0, s)) >>= λ r, (t r.2).map (+r.1)
+
+theorem time_iter_dom_iff (ht : ∀ x, (t x).dom ↔ (f x).dom) {x} :
+  (time_iter f t x).dom ↔ (eval f x).dom :=
 begin
-  apply reaches₁_single,
-  simp [with_time] at ⊢ h,
-  rcases h with ⟨b', h, rfl, ht⟩,
-  refine ⟨_, h, rfl, _⟩,
-  rw ← ht, ac_refl, 
-end,
-  none_of_none := λ ⟨t, a⟩, by simp [with_time] }
+  simp [time_iter],
+end
+
+end track_with
 
 end part_eval
