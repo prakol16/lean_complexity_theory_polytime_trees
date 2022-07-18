@@ -71,6 +71,15 @@ def equiv_list : ptree ≃ list ptree :=
 @[simp] lemma equiv_list_symm_nil : equiv_list.symm [] = nil := rfl
 @[simp] lemma equiv_list_symm_conds (a : ptree) (b : list ptree) : equiv_list.symm (a :: b) = node a (equiv_list.symm b) := rfl
 
+def to_option : ptree → option ptree
+| ptree.nil := none
+| x := some (ptree.nil.node x)
 
+def of_option : option ptree → ptree
+| none := ptree.nil
+| (some x) := x.right
+
+@[simp] lemma of_option_to_option (x : ptree) : of_option x.to_option = x :=
+by cases x; simp [to_option, of_option]
 
 end ptree

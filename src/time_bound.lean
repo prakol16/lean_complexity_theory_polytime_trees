@@ -1,12 +1,11 @@
 import tactic.linarith
-import frespects_pfun
 import code
 
 def code.time : code → ptree →. ℕ
 | code.left := λ t, part.some t.sizeof
-| code.right := λ t, pure t.sizeof
-| code.nil := λ t, pure 1
-| code.id := λ t, pure t.sizeof
+| code.right := λ t, part.some t.sizeof
+| code.nil := λ t, part.some 1
+| code.id := λ t, part.some t.sizeof
 | (code.node a b) := λ t, (+1) <$> (a.time t) + (b.time t)
 | (code.comp f g) := λ t, (+1) <$> (g.time t) + (g.eval t >>= f.time)
 | (code.case f g) := λ t, (+1) <$> if t.left = ptree.nil then f.time t.right else g.time t.right
@@ -17,6 +16,7 @@ def code.time : code → ptree →. ℕ
       if v'.left = ptree.nil then return $ sum.inl (vt.2 + t')
       else return $ sum.inr (v'.right, vt.2 + t')) (t, 0) 
 
+#exit
 @[reducible] def time_fix_fun (f : code) (vt : ptree × ℕ) : part (ℕ ⊕ ptree × ℕ) := 
 do  t' ← f.time vt.1,
     v' ← f.eval vt.1,

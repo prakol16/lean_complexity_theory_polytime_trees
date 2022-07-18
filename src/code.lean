@@ -1,6 +1,8 @@
 import data.pfun
 import plain_tree
+import reaches
 
+open part_eval
 
 inductive code
 | left : code
@@ -20,7 +22,7 @@ inductive code
 | (code.node l r) := λ t, do x ← l.eval t, y ← r.eval t, part.some (ptree.node x y)
 | (code.comp f g) := λ t, g.eval t >>= f.eval
 | (code.case f g) := λ t, if t.left = ptree.nil then f.eval t.right else g.eval t.right
-| (code.fix f) := pfun.fix $ λ t, (f.eval t).map (λ t', if t'.left = ptree.nil then sum.inl t'.right else sum.inr t'.right)
+| (code.fix f) := eval (λ t : ptree, (f.eval t).map ptree.to_option)
 
 local infixr `∘`:90 := code.comp
 
