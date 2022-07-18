@@ -1,6 +1,7 @@
 import data.pfun
 import logic.relation
 import logic.function.iterate
+import tactic.apply_fun
 
 namespace option
 
@@ -64,7 +65,6 @@ theorem reaches_of_invariant {σ} {f : σ →. option σ} (S : set σ) (hS : ∀
   {x y} (hx : x ∈ S) (hf : reaches f x y) : reaches (f.res_inter S) x y :=
 begin
   induction hf using relation.refl_trans_gen.head_induction_on with x' y' hx' hy' ih, { refl, },
-  rcases hx' with ⟨y, hy, rfl⟩,
   apply reaches.trans (reaches_fwd _) (ih _),
   { simp only [pfun.mem_res_inter], exact ⟨hx, hx'⟩, }, { exact hS hx hx', }
 end
@@ -171,6 +171,10 @@ begin
     rw [eval, pfun.fix_fwd _ b'], { exact ih, },
     rw ← part.eq_some_iff at ha', simp [ha'], }
 end
+
+@[simp] lemma eval_next_iter_eq_none {σ} (f : σ →. option σ) (a : σ) (h : (eval f a).dom) :
+  f ((eval f a).get h) = part.some none :=
+by { have := part.get_mem h, rw mem_eval at this, exact this.2, }
 
 theorem eval_maximal₁ {σ} {f : σ →. option σ} {a b : σ}
   (h : b ∈ eval f a) (c) : ¬ reaches₁ f b c | bc :=
@@ -340,6 +344,13 @@ begin
   simp at this ⊢, rwa part.get_eq_iff_mem,
 end
 
+theorem frespects.eval_dom (H : frespects f₁ f₂ ftr) (x : σ₁) :
+  (eval f₂ (ftr x)).dom ↔ (eval f₁ x).dom := by simp [H.eval_eq]
+
+theorem frespects.eval_get_eq (H : frespects f₁ f₂ ftr) (a : σ₁) :
+  ∀ h, ftr ((eval f₁ a).get h) = (eval f₂ (ftr a)).get (by rwa H.eval_dom) :=
+by { intros, simp [H.eval_eq], refl, }
+
 section track_with
 variables {σ α : Type} (f : σ →. option σ) (t : σ →. ℕ)
 
@@ -369,7 +380,10 @@ theorem time_iter_dom_iff (ht : ∀ x, (t x).dom ↔ (f x).dom) {x} :
   (time_iter f t x).dom ↔ (eval f x).dom :=
 begin
   simp [time_iter],
+  have := with_time_respects f t ht,
+  simp_rw [← this.eval_dom (0, x), this.eval_get_eq (0, x), ht, eval_next_iter_eq_none f x], simp,
 end
+
 
 end track_with
 
