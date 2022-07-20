@@ -3,22 +3,116 @@ import logic.embedding
 import pfun_to_fun
 import polytime
 
-def polydecidable_aux (P : ptree → Prop) : Prop :=
-∃ (c : code) (pc : polytime c), ∀ x, ptree.nil ∈ c.eval x ↔ P x 
-
 class polycodable (α : Type*) :=
-(encode : α ↪ ptree)
-(mem_poly' : polydecidable_aux (∈ set.range encode))
+(encode : α → ptree)
+(decode : ptree → option α)
+(decode_encode : ∀ x, decode (encode x) = some x)
+(polytime_decode : ∃ c, polytime c ∧ ∀ x, c.eval x = part.some (ptree.of_option $ (decode x).map encode))
 
-open polycodable (encode)
+attribute [simp] polycodable.decode_encode
+
+open polycodable (encode decode)
+
+def polytime_fun {α β : Type*} [polycodable α] [polycodable β] (f : α → β) :=
+∃ (c : code) (pc : polytime c), ∀ x, c.eval (encode x) = part.some (encode (f x))
+
+instance : polycodable ptree :=
+{ encode := id,
+  decode := some,
+  decode_encode := λ _, rfl,
+  polytime_decode := ⟨_, polytime_node polytime_nil polytime_id, λ x, by simp [ptree.of_option]⟩ }
+
+@[simp] lemma ptree_encode (p : ptree) : encode p = p := rfl
+
+variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
+
+example (x : α) : decode (encode x) = some x := by { simp, }
+
+lemma polytime_fun.encode : polytime_fun (@encode α _) :=
+⟨code.id, polytime_id, λ x, by simp⟩
+
+lemma polytime_fun.decode {f : α → β} (hf : polytime_fun (encode ∘ f)) : polytime_fun f := hf
+
+lemma polytime_fun.id : polytime_fun (@id α) := ⟨code.id, polytime_id, λ x, by simp⟩
+
+lemma polytime_fun.const (x : α) : polytime_fun (function.const β x) := ⟨code.const (encode x), polytime_const _, λ x, by simp⟩
+
+lemma polytime_fun.comp {f : β → γ} {g : α → β} : polytime_fun f → polytime_fun g → polytime_fun (f ∘ g)
+| ⟨c₁, pc₁, s₁⟩ ⟨c₂, pc₂, s₂⟩ := ⟨c₁.comp c₂, polytime_comp pc₁ pc₂, λ x, by simp [s₁, s₂]⟩
+
+lemma polytime_fun.ptree_left : polytime_fun ptree.left := ⟨code.left, polytime_left, λ x, by simp⟩
+lemma polytime_fun.ptree_right : polytime_fun ptree.right := ⟨code.right, polytime_right, λ x, by simp⟩
+
+lemma polycodable.encode_injective (α : Type*) [polycodable α] : function.injective (@encode α _) :=
+λ x y hxy, by { apply_fun (@decode α _) at hxy, simpa using hxy, }
+
+@[simp] lemma polycodable.encode_inj_iff {x y : α} : encode x = encode y ↔ x = y :=
+(polycodable.encode_injective α).eq_iff
+
+section bool
+
+instance : polycodable bool :=
+{ encode := λ b, cond b ptree.nil ptree.non_nil,
+  decode := λ v, if v = ptree.nil then some tt else some ff,
+  decode_encode := λ b, by cases b; simp,
+  polytime_decode := ⟨_, 
+  polytime_node polytime_nil (polytime_ite polytime_id polytime_nil (polytime_const ptree.non_nil)), λ x, by cases x; simp [ptree.of_option]⟩ }
+
+lemma polytime_fun.ite' {f : α → bool} {g h : α → β} : polytime_fun f → polytime_fun g → polytime_fun h → polytime_fun (λ x, cond (f x) (g x) (h x))
+| ⟨cf, pf, sf⟩ ⟨cg, pg, sg⟩ ⟨ch, ph, sh⟩ :=
+⟨code.ite cf cg ch, polytime_ite pf pg ph, λ x, by cases H : (f x); simp [sf, sg, sh, ← apply_ite part.some, ← apply_ite encode, encode, H]⟩ 
+
+lemma polytime_fun.ite {P : α → Prop} [decidable_pred P] {g h : α → β} (hP : polytime_fun (λ x, (P x : bool))) (hg : polytime_fun g) (hh : polytime_fun h) :
+  polytime_fun (λ x, if P x then g x else h x) :=
+begin
+  convert_to polytime_fun (λ x, cond (P x) (g x) (h x)),
+  { ext x, by_cases P x; simp, },
+  exact polytime_fun.ite' hP hg hh,
+end
+
+
+private lemma polytime_fun.eq_nil_aux : polytime_fun (λ x', (x' = ptree.nil : bool)) :=
+⟨_, polytime_ite polytime_id polytime_nil (polytime_const ptree.non_nil), λ x, by cases x; simp [encode]⟩
+
+lemma band_eq_cond (x y : bool) : x && y = cond x y ff := by cases x; simp
+
+private lemma polytime_fun.eq_const_aux : ∀ (x : ptree), polytime_fun (λ x', (x' = x : bool))
+| ptree.nil := polytime_fun.eq_nil_aux
+| (ptree.node a b) :=
+begin
+  convert_to polytime_fun (λ x', cond (x' = ptree.nil) ff ((x'.left = a) && (x'.right = b))),
+  { ext x', cases x'; simp, },
+  apply polytime_fun.ite' polytime_fun.eq_nil_aux (polytime_fun.const _), simp only [band_eq_cond],
+  apply polytime_fun.ite' (polytime_fun.comp (polytime_fun.eq_const_aux a) polytime_fun.ptree_left)
+    (polytime_fun.comp (polytime_fun.eq_const_aux b) polytime_fun.ptree_right)
+    (polytime_fun.const _),
+end
+
+lemma polytime_fun.eq_const {f : α → β} [decidable_eq β] (hf : polytime_fun f) (x : β) : polytime_fun (λ x', (f x' = x : bool)) :=
+begin
+  convert_to polytime_fun (λ x', (encode (f x') = encode x : bool)), { simp, },
+  exact polytime_fun.comp (polytime_fun.eq_const_aux (encode x)) hf,
+end
+
+end bool
+
+section embed
+
+
+
+end embed
+
+section pair
+
+end pair
+
+#exit
 
 instance : polycodable ptree :=
 { encode := function.embedding.refl _,
   mem_poly' := ⟨code.nil, polytime_nil, by simp⟩ }
 
-@[simp] lemma ptree_encode (p : ptree) : encode p = p := rfl
 
-variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
 
 def polydecidable (P : α → Prop) : Prop :=
 ∃ (c : code) (pc : polytime c), ∀ x, ptree.nil ∈ c.eval (encode x) ↔ P x   

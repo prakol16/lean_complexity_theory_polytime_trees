@@ -1,5 +1,6 @@
 import tactic.simpa
 import logic.equiv.basic
+import logic.encodable.basic
 
 @[derive decidable_eq]
 inductive ptree
@@ -9,6 +10,11 @@ inductive ptree
 namespace ptree
 
 instance : inhabited ptree := ⟨nil⟩
+
+/-- A non-nil ptree -/
+abbreviation non_nil := node nil nil
+
+@[simp] lemma non_nil_ne : non_nil ≠ nil := by trivial
 
 @[simp] def left : ptree → ptree
 | nil := nil
@@ -73,13 +79,39 @@ def equiv_list : ptree ≃ list ptree :=
 
 def to_option : ptree → option ptree
 | ptree.nil := none
-| x := some (ptree.nil.node x)
+| x := some x.right
 
 def of_option : option ptree → ptree
 | none := ptree.nil
-| (some x) := x.right
+| (some x) := ptree.nil.node x
 
-@[simp] lemma of_option_to_option (x : ptree) : of_option x.to_option = x :=
+@[simp] lemma of_option_to_option (x : option ptree) : (of_option x).to_option  = x :=
 by cases x; simp [to_option, of_option]
+
+@[simp] lemma to_option_none (x : ptree) : x.to_option = none ↔ x = ptree.nil :=
+by cases x; simp [to_option]
+
+@[simp] lemma to_option_some (x v : ptree) : x.to_option = some v ↔ x ≠ ptree.nil ∧ x.right = v :=
+by cases x; simp [to_option]
+
+def to_nat : ptree → ℕ
+| nil := 0
+| (node a b) := (nat.mkpair a.to_nat b.to_nat) + 1
+
+def of_nat : ℕ → ptree
+| 0 := nil
+| (n + 1) := 
+  have wf₁ : (nat.unpair n).1 < n + 1 := nat.lt_succ_of_le (nat.unpair_left_le _),
+  have wf₂ : (nat.unpair n).2 < n + 1 := nat.lt_succ_of_le (nat.unpair_right_le _),
+node (of_nat (nat.unpair n).1) (of_nat (nat.unpair n).2)
+
+@[simp] lemma of_nat_to_nat (x : ptree) : of_nat x.to_nat = x :=
+by { induction x; simp [of_nat, to_nat, *], }
+
+instance : encodable ptree :=
+{ encode := ptree.to_nat,
+  decode := some ∘ ptree.of_nat,
+  encodek := λ x, by simp }
+
 
 end ptree
