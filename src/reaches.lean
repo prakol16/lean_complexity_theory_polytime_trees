@@ -344,6 +344,14 @@ begin
   simp at this ⊢, rwa part.get_eq_iff_mem,
 end
 
+theorem frespects.of_eval (H : frespects f₁ f₂ ftr)
+  {a b : σ₁} (h : b ∈ eval f₁ a) : (ftr b) ∈ eval f₂ (ftr a) :=
+by { rw H.eval_eq, exact part.mem_map ftr h, }
+
+theorem frespects.none_iff_none (H : frespects f₁ f₂ ftr) (a : σ₁) :
+  none ∈ f₁ a ↔ none ∈ f₂ (ftr a) :=
+by { rw ← fun_respects at H, rw H.none_iff_none rfl, }
+
 theorem frespects.eval_dom (H : frespects f₁ f₂ ftr) (x : σ₁) :
   (eval f₂ (ftr x)).dom ↔ (eval f₁ x).dom := by simp [H.eval_eq]
 
@@ -357,7 +365,7 @@ variables {σ α : Type} (f : σ →. option σ) (t : σ →. ℕ)
 def with_time : ℕ × σ →. option (ℕ × σ) :=
 λ tx, do r₁ ← f tx.2, r₂ ← t tx.2, part.some (r₁.map $ λ r₁', (tx.1 + r₂, r₁'))
 
-theorem with_time_respects (ht : ∀ x, (t x).dom ↔ (f x).dom) : frespects (with_time f t) f prod.snd :=
+theorem with_time_respects {f : σ →. option σ} {t : σ →. ℕ} (ht : ∀ x, (t x).dom ↔ (f x).dom) : frespects (with_time f t) f prod.snd :=
 { dom_of_dom := λ a, by simp [with_time, ht],
   some_of_some := λ ⟨a₁, x₁⟩ ⟨a₂, x₂⟩ h, by { apply reaches₁_single, simp [with_time] at h, rcases h with ⟨_, h, _, _, rfl, rfl⟩, exact h, },
   none_of_none := λ ⟨a, x⟩, by { simp [with_time], exact λ h _ _, h, } }
@@ -376,14 +384,32 @@ end,
 def time_iter : σ →. ℕ :=
 λ s, (eval (with_time f t) (0, s)) >>= λ r, (t r.2).map (+r.1)
 
+variables {f t}
 theorem time_iter_dom_iff (ht : ∀ x, (t x).dom ↔ (f x).dom) {x} :
   (time_iter f t x).dom ↔ (eval f x).dom :=
 begin
   simp [time_iter],
-  have := with_time_respects f t ht,
+  have := with_time_respects ht,
   simp_rw [← this.eval_dom (0, x), this.eval_get_eq (0, x), ht, eval_next_iter_eq_none f x], simp,
 end
 
+theorem time_iter_eq_iff (ht : ∀ x, (t x).dom ↔ (f x).dom) (x : σ) (n : ℕ) :
+  n ∈ time_iter f t x ↔ ∃ t' b, reaches (with_time f t) (0, x) (t', b) ∧ none ∈ f b ∧ n ∈ (+t') <$> (t b) :=
+begin
+  simp [time_iter, mem_eval],
+  apply exists₂_congr, intros a b,
+  conv_lhs { rw and_assoc, }, apply and_congr, { refl, },
+  apply and_congr, { rw ← (with_time_respects ht).none_iff_none (a, b), exact part.eq_some_iff, }, { refl, },
+end
+
+theorem time_iter_eq_iff_of_eval (ht : ∀ x, (t x).dom ↔ (f x).dom) {x n b} (hb : b ∈ eval f x) :
+  n ∈ time_iter f t x ↔ ∃ t', reaches (with_time f t) (0, x) (t', b) ∧ none ∈ f b ∧ n ∈ (+t') <$> (t b) :=
+begin
+  suffices : ∀ {t' b'}, reaches (with_time f t) (0, x) (t', b') → none ∈ f b' → b = b',
+  { rw time_iter_eq_iff ht, apply exists_congr, intro n, split, { rintro ⟨b, h₁, h₂, h₃⟩, cases this h₁ h₂, tauto, }, intro, use b, tauto, },
+  intros n b' h₁ h₂, rw [← (with_time_respects ht).none_iff_none (n, b'), ← part.eq_some_iff] at h₂,
+  exact part.mem_unique hb ((with_time_respects ht).of_eval (mem_eval.mpr ⟨h₁, h₂⟩)),
+end
 
 end track_with
 
