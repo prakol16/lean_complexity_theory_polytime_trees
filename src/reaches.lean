@@ -2,6 +2,7 @@ import data.pfun
 import logic.relation
 import logic.function.iterate
 import tactic.apply_fun
+import tactic.linear_combination
 
 namespace option
 
@@ -56,6 +57,10 @@ lemma reaches_fwd {σ} {f : σ →. option σ} {x y : σ} :
 theorem reaches_mono {σ} {f : σ →. option σ} (S : set σ) (hS : S ⊆ f.dom) {x y} (hf : reaches (f.restrict hS) x y) :
   reaches f x y :=
 by { apply refl_trans_gen.mono _ hf, simp, }
+
+theorem reaches_mono' {σ} {f g : σ →. option σ} (hfg : ∀ ⦃x y⦄, y ∈ f x → y ∈ g x) {x y} (hf : reaches f x y) :
+  reaches g x y :=
+by { apply refl_trans_gen.mono _ hf, intros _ _, apply hfg, }
 
 theorem invariant_of_reaches {σ} {f : σ →. option σ} (S : set σ) (hS : ∀ ⦃x y⦄, x ∈ S → some y ∈ f x → y ∈ S)
   {x y} (hx : x ∈ S) (hf : reaches f x y) : y ∈ S :=
@@ -171,6 +176,10 @@ begin
     rw [eval, pfun.fix_fwd _ b'], { exact ih, },
     rw ← part.eq_some_iff at ha', simp [ha'], }
 end
+
+lemma eval_mono {σ} {f g : σ →. option σ} (hfg : ∀ ⦃x y⦄, y ∈ f x → y ∈ g x) {x y} (h : y ∈ eval f x) :
+  y ∈ eval g x :=
+by { rw [mem_eval, part.eq_some_iff] at *, exact ⟨reaches_mono' hfg h.1, hfg h.2⟩, }
 
 @[simp] lemma eval_next_iter_eq_none {σ} (f : σ →. option σ) (a : σ) (h : (eval f a).dom) :
   f ((eval f a).get h) = part.some none :=
@@ -393,6 +402,16 @@ begin
   simp_rw [← this.eval_dom (0, x), this.eval_get_eq (0, x), ht, eval_next_iter_eq_none f x], simp,
 end
 
+lemma with_time_mono {g : σ →. option σ} (hfg : ∀ ⦃x y⦄, y ∈ f x → y ∈ g x) :
+  ∀ ⦃x y⦄, y ∈ with_time f t x → y ∈ with_time g t x := by { simp [with_time], tauto, }
+
+lemma time_iter_mono {g : σ →. option σ} (hfg : ∀ ⦃x y⦄, y ∈ f x → y ∈ g x) {x y} (hx : y ∈ time_iter f t x) :
+  y ∈ time_iter g t x :=
+begin
+  simp [time_iter] at hx ⊢, rcases hx with ⟨a, b, h₁, ⟨a', h₂, rfl⟩⟩,
+  refine ⟨a, b, _, ⟨a', h₂, rfl⟩⟩, apply eval_mono (with_time_mono hfg) h₁,
+end
+
 theorem time_iter_eq_iff (ht : ∀ x, (t x).dom ↔ (f x).dom) (x : σ) (n : ℕ) :
   n ∈ time_iter f t x ↔ ∃ t' b, reaches (with_time f t) (0, x) (t', b) ∧ none ∈ f b ∧ n ∈ (+t') <$> (t b) :=
 begin
@@ -409,6 +428,43 @@ begin
   { rw time_iter_eq_iff ht, apply exists_congr, intro n, split, { rintro ⟨b, h₁, h₂, h₃⟩, cases this h₁ h₂, tauto, }, intro, use b, tauto, },
   intros n b' h₁ h₂, rw [← (with_time_respects ht).none_iff_none (n, b'), ← part.eq_some_iff] at h₂,
   exact part.mem_unique hb ((with_time_respects ht).of_eval (mem_eval.mpr ⟨h₁, h₂⟩)),
+end
+
+@[simp] lemma one_def : (1 : part ℕ) = part.some 1 := rfl
+
+lemma time_eval_const_respects (ht : ∀ ⦃x⦄, (f x).dom → (t x).dom) (J : ℕ) :
+  respects (with_time (f.res_inter {s | ∀ k ∈ t s, k ≤ J}) (λ _, 1))
+           (with_time (f.res_inter {s | ∀ k ∈ t s, k ≤ J}) t) 
+           (λ s₁ s₂, s₁.2 = s₂.2 ∧ s₂.1 ≤ J * s₁.1) :=
+{ dom_of_dom := by { rintro ⟨t₁, s⟩ ⟨t₂, s⟩, dsimp only, rintro ⟨rfl, _⟩, simp [with_time], exact λ h _, h, },
+  some_of_some := 
+begin
+  rintro ⟨t₁, s₁⟩ ⟨t₂, s₁⟩ ⟨t₃, s₂⟩, dsimp only, rintro ⟨rfl, hb⟩,
+  simp [with_time], rintros s₂' hs hn rfl rfl, 
+  rcases part.dom_iff_mem.mp (ht (part.dom_iff_mem.mpr ⟨_, hn⟩)) with ⟨tn, htn⟩,
+  use [t₂ + tn, s₂, rfl], { mono, }, apply reaches₁_single, simp, refine ⟨⟨_, _⟩, _⟩; assumption,
+end,
+  none_of_none :=
+begin
+  rintro ⟨t₁, s₁⟩ ⟨t₂, s₁⟩, dsimp only, rintro ⟨rfl, _⟩,
+  simp [with_time, ← part.dom_iff_mem],
+  refine λ h₁ h₂, ⟨⟨h₁, h₂⟩, ht _⟩, rw part.dom_iff_mem, exact ⟨_, h₂⟩,
+end }
+
+lemma with_time_le_of_iters_le {x : σ} {n J : ℕ} (ht : ∀ x, (f x).dom → (t x).dom)
+  (h : n ∈ time_iter (f.res_inter {s | ∀ k ∈ t s, k ≤ J}) (pfun.pure 1) x) :
+  ∃ k ∈ time_iter f t x, k ≤ n * J :=
+begin
+  simp [time_iter, pfun.pure] at h, rcases h with ⟨n, ⟨⟨s, hs⟩, rfl⟩⟩,
+  obtain ⟨⟨tf, sf⟩, h₁, h₂⟩ := tr_eval (time_eval_const_respects ht J) _ hs, swap, { use (0, x), }, swap, { split; refl, },
+  dsimp only at h₁, rcases h₁ with ⟨rfl, h₁⟩,
+  simp [time_iter],
+  obtain ⟨tl, htl, tl_le⟩ : ∃ tl ∈ t s, tl ≤ J,
+  { rw mem_eval at h₂, rcases h₂ with ⟨_, h₂⟩, simp [part.eq_some_iff, with_time] at h₂,
+    rcases h₂ with ⟨⟨H, _⟩, ⟨tl, htl⟩⟩, use [tl, htl, H _ htl], },
+  refine ⟨tf + tl, ⟨⟨tf, s, _, ⟨tl, htl, by ac_refl⟩⟩, _⟩⟩,
+  { apply eval_mono (with_time_mono _) h₂, simp, },
+  conv_rhs { rw [add_mul, add_comm], }, mono, { rw mul_comm, exact h₁, }, simpa using tl_le,
 end
 
 end track_with

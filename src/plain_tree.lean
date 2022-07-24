@@ -115,3 +115,9 @@ instance : encodable ptree :=
 
 
 end ptree
+
+
+namespace function
+
+
+end function

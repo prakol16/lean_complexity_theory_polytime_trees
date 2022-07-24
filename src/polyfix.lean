@@ -3,6 +3,28 @@ import npolynomial
 
 variables {α β : Type*}
 
+open part_eval (eval time_iter)
+
+lemma pfun.res_mono (f : α →. β) {S S' : set α} {x y} (h : y ∈ f.res_inter S x) (hS : S ⊆ S') : y ∈ f.res_inter S' x :=
+by { simp at h ⊢, tauto, }
+
+theorem time_bound_fix {c : code} {b₁ b₂ b₃ : ℕ → ℕ} (mb : monotone b₁) 
+  (h₁ : time_bound c b₁) (h₂ : ∀ x : ptree, ∃ t ≤ b₃ x.sizeof, t ∈ (time_iter ((c.eval.map ptree.to_option).res_inter {s | s.sizeof ≤ b₂ x.sizeof}) (pfun.pure 1) x)) :
+  time_bound c.fix (λ t, (b₃ t) * (b₁ (b₂ t)) + t) :=
+begin
+  simp [time_bound, code.time], intro v, specialize h₂ v,
+  rcases h₂ with ⟨t, ht, H⟩,
+  obtain ⟨a, ha, a_le⟩ := @part_eval.with_time_le_of_iters_le _ (c.eval.map ptree.to_option) c.time _ _ (b₁ (b₂ v.sizeof)) _ (part_eval.time_iter_mono _ H),
+  { use [a, ha], exact a_le.trans (mul_le_mul_right' ht _), },
+  { intro, simp [time_dom_iff_eval_dom, pfun.map], },
+  intros x y hxy, apply pfun.res_mono _ hxy, intros s hs k hk,
+  refine (time_bound_spec h₁ hk).trans _, apply mb, exact hs,
+end
+
+
+
+#exit
+
 def fix_bounded_while (f : α → β ⊕ α) (P : α → Prop) [decidable_pred P] : ℕ → α → option β
 | 0 x := none
 | (n + 1) x := if P x then match f x with

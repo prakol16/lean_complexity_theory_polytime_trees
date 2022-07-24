@@ -35,6 +35,9 @@ by { ext, apply time_dom_iff_eval_dom, }
 def time_bound (c : code) (bound : ℕ → ℕ) : Prop :=
 ∀ (v : ptree), ∃ t ∈ c.time v, t ≤ bound v.sizeof
 
+lemma time_bound_spec {c : code} {bound : ℕ → ℕ} (h : time_bound c bound) {t v} (hn : t ∈ c.time v) : t ≤ bound v.sizeof :=
+by { specialize h v, rcases h with ⟨t, ht, H⟩, cases part.mem_unique hn ht, exact H, }
+
 lemma time_bound_of_time_bound_le {c : code} {b₁ : ℕ → ℕ} (hb₁ : time_bound c b₁) {b₂ : ℕ → ℕ} (hb₂ : ∀ n, b₁ n ≤ b₂ n) :
   time_bound c b₂ := λ v, by { obtain ⟨t, ht, t_le⟩ := hb₁ v, use [t, ht], exact t_le.trans (hb₂ _), }
 
