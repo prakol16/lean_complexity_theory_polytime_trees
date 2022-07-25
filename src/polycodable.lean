@@ -38,6 +38,16 @@ begin
   rintro ⟨c, pc, s⟩, use [c, pc], intro x, simp [s],
 end
 
+lemma polytime_fun_iff'' (f : α → β) :
+  polytime_fun f ↔ ∃ (c : code) (pc : polytime c), ∀ x, (c.eval (encode x)).map decode = part.some (f x) :=
+begin
+  split, { rintro ⟨c, pc, s⟩, use [c, pc], simp [s], },
+  rintro ⟨c, pc, s⟩, rcases polycodable.polytime_decode β with ⟨c₂, pc₂, s₂⟩,
+  use [c₂.comp c, polytime_comp pc₂ pc], intro x, specialize s x,
+  simp [part.eq_some_iff] at s ⊢, rcases s with ⟨a, h₁, h₂⟩, use [a, h₁],
+  simp [s₂, h₂],
+end
+
 lemma polytime_fun.encode : polytime_fun (@encode α _) :=
 ⟨code.id, polytime_id, λ x, by simp⟩
 
@@ -233,7 +243,7 @@ lemma polycodable.mk_decode' {δ : Type*} (encode : δ → α) (decode : α → 
 polytime_decode
 
 
-lemma polycodable.mk'_decode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
+lemma polycodable.mk_decode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
   (polytime_decode : polytime_fun (encode ∘ decode)) (f : β → δ) (hf : polytime_fun (encode ∘ f)) :
   @polytime_fun β δ _ (polycodable.mk' encode decode encode_decode polytime_decode) f :=
 hf
