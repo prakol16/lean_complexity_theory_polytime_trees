@@ -22,7 +22,7 @@ inductive code
 | (code.node l r) := λ t, do x ← l.eval t, y ← r.eval t, part.some (ptree.node x y)
 | (code.comp f g) := λ t, g.eval t >>= f.eval
 | (code.case f g) := λ t, if t.left = ptree.nil then f.eval t.right else g.eval t.right
-| (code.fix f) := eval (λ t : ptree, (f.eval t).map ptree.to_option)
+| (code.fix f) := eval (f.eval.map ptree.to_option)
 
 local infixr `∘`:90 := code.comp
 

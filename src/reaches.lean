@@ -14,7 +14,17 @@ namespace option
 
 end option
 
+namespace part
+
+@[simp] lemma restrict_dom {α : Type*} (x : part α) {p : Prop} (hp : p → x.dom) :
+  (x.restrict p hp).dom ↔ p := by refl 
+
+end part
+
 namespace pfun
+
+@[simp] lemma res_dom {α β : Type*} (f : α →. β) {p : set α} (hp : p ⊆ f.dom) :
+  (f.restrict hp).dom = p := by simp [pfun.dom, pfun.restrict]
 
 /-- Restrict with the intersection of a set -/
 def res_inter {α β : Type*} (f : α →. β) (p : set α) : α →. β :=
@@ -23,6 +33,21 @@ f.restrict (set.inter_subset_right p f.dom)
 @[simp] lemma mem_res_inter {α β : Type*} {f : α →. β} {p : set α} {x y} :
   y ∈ f.res_inter p x ↔ x ∈ p ∧ y ∈ f x :=
 by { simp [res_inter], tauto, }
+
+@[simp] lemma res_inter_res_inter {α β : Type*} {f : α →. β} {p₁ p₂ : set α} :
+  (f.res_inter p₁).res_inter p₂ = f.res_inter (p₁ ∩ p₂) :=
+by { ext, simp, tauto, }
+
+@[simp] lemma res_inter_dom {α β : Type*} (f : α →. β) (p : set α) :
+  (f.res_inter p).dom = p ∩ f.dom := by simp [res_inter]
+
+@[simp] lemma res_inter_dom' {α β : Type*} {f : α →. β} {p : set α} :
+  ∀ {x}, (f.res_inter p x).dom ↔ x ∈ p ∧ (f x).dom :=
+set.ext_iff.mp (res_inter_dom f p)
+
+@[simp] lemma coe_res_inter {α β : Type*} (f : α → β) (p : set α) :
+  (f : α →. β).res_inter p = pfun.res f p :=
+by { ext x, simp [mem_res], tauto, }
 
 end pfun
 
@@ -181,6 +206,11 @@ lemma eval_mono {σ} {f g : σ →. option σ} (hfg : ∀ ⦃x y⦄, y ∈ f x �
   y ∈ eval g x :=
 by { rw [mem_eval, part.eq_some_iff] at *, exact ⟨reaches_mono' hfg h.1, hfg h.2⟩, }
 
+lemma eval_eq_of_invariant {σ} (f : σ →. option σ) (S : set σ) (hS : ∀ ⦃x y⦄, x ∈ S → some y ∈ f x → y ∈ S) {x} (hx : x ∈ S) :
+  eval f x = eval (f.res_inter S) x :=
+by { ext y, split, swap, { intro h, apply eval_mono _ h, simp, }, simp [mem_eval, part.eq_some_iff],
+     intros H₁ H₂, exact ⟨reaches_of_invariant S hS hx H₁, invariant_of_reaches _ hS hx H₁, H₂⟩, } 
+
 @[simp] lemma eval_next_iter_eq_none {σ} (f : σ →. option σ) (a : σ) (h : (eval f a).dom) :
   f ((eval f a).get h) = part.some none :=
 by { have := part.get_mem h, rw mem_eval at this, exact this.2, }
@@ -330,7 +360,27 @@ structure frespects {σ₁ σ₂} (f₁ : σ₁ →. option σ₁) (f₂ : σ₂
 (some_of_some : ∀ ⦃a b : σ₁⦄, some b ∈ f₁ a → reaches₁ f₂ (tr a) (tr b))
 (none_of_none : ∀ ⦃a⦄, none ∈ f₁ a → none ∈ f₂ (tr a))
 
+/-- An even simpler version where both take only one step each time -/
+structure fcommutes {σ₁ σ₂} (f₁ : σ₁ →. option σ₁) (f₂ : σ₂ →. option σ₂) (tr : σ₁ → σ₂) : Prop :=
+(dom_of_dom : ∀ ⦃a : σ₁⦄, (f₂ (tr a)).dom → (f₁ a).dom)
+(some_of_some : ∀ ⦃a b : σ₁⦄, some b ∈ f₁ a → some (tr b) ∈ f₂ (tr a))
+(none_of_none : ∀ ⦃a⦄, none ∈ f₁ a → none ∈ f₂ (tr a))
+
 variable {ftr : σ₁ → σ₂}
+theorem fcommutes.to_frespects (H : fcommutes f₁ f₂ ftr) : frespects f₁ f₂ ftr :=
+{ dom_of_dom := H.dom_of_dom,
+  some_of_some := λ a b h, by { apply reaches₁_single, exact H.some_of_some h, },
+  none_of_none := H.none_of_none }
+
+lemma fcommutes.some_of_some' (H : fcommutes f₁ f₂ ftr) {a b : σ₁} 
+  (h : some (ftr b) ∈ f₂ (ftr a)) :
+  ∃ y, ftr y = ftr b ∧ some y ∈ f₁ a :=
+begin
+  obtain ⟨y, hy⟩ := part.dom_iff_mem.mp (H.dom_of_dom (part.dom_iff_mem.mpr ⟨_, h⟩)),
+  cases y, { cases part.mem_unique h (H.none_of_none hy), },
+  refine ⟨_, _, hy⟩, exact (option.some.inj (part.mem_unique h (H.some_of_some hy))).symm,
+end
+
 theorem fun_respects : respects f₁ f₂ (λ a b, ftr a = b) ↔ frespects f₁ f₂ ftr :=
 begin
   split,
@@ -342,6 +392,21 @@ begin
     { rintro a₁ a₂ b₁ rfl h, exact ⟨_, rfl, H.some_of_some h⟩, },
     rintro a₁ a₂ rfl h, exact H.none_of_none h, }
 end
+
+lemma frespects.dom_iff_dom (H : frespects f₁ f₂ ftr) ⦃x : σ₁⦄ :
+  (f₁ x).dom ↔ (f₂ (ftr x)).dom :=
+respects.dom_iff_domm (fun_respects.mpr H) rfl
+-- f(g(x)) = x
+-- S(g(a)) -->  a' 
+-- g(a)  --> a
+-- theorem fcommutes.symm (H : fcommutes f₁ f₂ ftr) {ftr_inv : σ₂ → σ₁} (hinv : function.right_inverse ftr_inv ftr) :
+--   fcommutes f₂ f₁ ftr_inv :=
+-- { dom_of_dom := λ a, by simp [(fun_respects.mpr H.to_frespects).dom_iff_domm (hinv a)],
+--   some_of_some := λ a b h,
+-- begin
+--   rw [← hinv b, ← hinv a] at h, have := H.some_of_some' h,
+-- end,
+--   none_of_none := _ }
 
 theorem frespects.eval_eq (H : frespects f₁ f₂ ftr)
   (a₁ : σ₁) : eval f₂ (ftr a₁) = (eval f₁ a₁).map ftr :=
@@ -369,10 +434,10 @@ theorem frespects.eval_get_eq (H : frespects f₁ f₂ ftr) (a : σ₁) :
 by { intros, simp [H.eval_eq], refl, }
 
 section track_with
-variables {σ α : Type} (f : σ →. option σ) (t : σ →. ℕ)
+variables {σ α : Type*} (f : σ →. option σ) (t : σ →. ℕ)
 
 def with_time : ℕ × σ →. option (ℕ × σ) :=
-λ tx, do r₁ ← f tx.2, r₂ ← t tx.2, part.some (r₁.map $ λ r₁', (tx.1 + r₂, r₁'))
+λ tx, (f tx.2).bind (λ r₁, (t tx.2).bind (λ r₂ : ℕ, part.some (r₁.map $ λ r₁', (tx.1 + r₂, r₁'))))
 
 theorem with_time_respects {f : σ →. option σ} {t : σ →. ℕ} (ht : ∀ x, (t x).dom ↔ (f x).dom) : frespects (with_time f t) f prod.snd :=
 { dom_of_dom := λ a, by simp [with_time, ht],
@@ -391,9 +456,13 @@ end,
   none_of_none := by { simp [with_time], tauto, } }
 
 def time_iter : σ →. ℕ :=
-λ s, (eval (with_time f t) (0, s)) >>= λ r, (t r.2).map (+r.1)
+λ s, (eval (with_time f t) (0, s)).bind (λ r, (t r.2).map (+r.1))
 
 variables {f t}
+lemma with_time_restrict (S : set σ) :
+  with_time (f.res_inter S) t = (with_time f t).res_inter (prod.snd⁻¹' S) :=
+by { ext, simp [with_time], tauto, }
+
 theorem time_iter_dom_iff (ht : ∀ x, (t x).dom ↔ (f x).dom) {x} :
   (time_iter f t x).dom ↔ (eval f x).dom :=
 begin
@@ -421,6 +490,15 @@ begin
   apply and_congr, { rw ← (with_time_respects ht).none_iff_none (a, b), exact part.eq_some_iff, }, { refl, },
 end
 
+
+lemma time_iter_invariant {g : σ →. option σ} (S : set σ) (hS : ∀ ⦃x y⦄, x ∈ S → some y ∈ g x → y ∈ S) {x} (hx : x ∈ S) :
+  time_iter g t x = time_iter (g.res_inter S) t x :=
+begin
+  simp only [time_iter], rw eval_eq_of_invariant (with_time g t) (prod.snd⁻¹' S), { simp [with_time_restrict], },
+  { rintros ⟨x₁, x₂⟩ ⟨y₁, y₂⟩, simp [with_time], rintros hx₂ x' hx' t' ht' rfl rfl, exact hS hx₂ hx', },
+  simpa, 
+end
+
 theorem time_iter_eq_iff_of_eval (ht : ∀ x, (t x).dom ↔ (f x).dom) {x n b} (hb : b ∈ eval f x) :
   n ∈ time_iter f t x ↔ ∃ t', reaches (with_time f t) (0, x) (t', b) ∧ none ∈ f b ∧ n ∈ (+t') <$> (t b) :=
 begin
@@ -436,7 +514,7 @@ lemma time_eval_const_respects (ht : ∀ ⦃x⦄, (f x).dom → (t x).dom) (J : 
   respects (with_time (f.res_inter {s | ∀ k ∈ t s, k ≤ J}) (λ _, 1))
            (with_time (f.res_inter {s | ∀ k ∈ t s, k ≤ J}) t) 
            (λ s₁ s₂, s₁.2 = s₂.2 ∧ s₂.1 ≤ J * s₁.1) :=
-{ dom_of_dom := by { rintro ⟨t₁, s⟩ ⟨t₂, s⟩, dsimp only, rintro ⟨rfl, _⟩, simp [with_time], exact λ h _, h, },
+{ dom_of_dom := by { rintro ⟨t₁, s⟩ ⟨t₂, s⟩, dsimp only, rintro ⟨rfl, _⟩, simp [with_time], tauto, },
   some_of_some := 
 begin
   rintro ⟨t₁, s₁⟩ ⟨t₂, s₁⟩ ⟨t₃, s₂⟩, dsimp only, rintro ⟨rfl, hb⟩,
@@ -466,6 +544,30 @@ begin
   { apply eval_mono (with_time_mono _) h₂, simp, },
   conv_rhs { rw [add_mul, add_comm], }, mono, { rw mul_comm, exact h₁, }, simpa using tl_le,
 end
+
+theorem fcommutes.to_time_frespects (H : fcommutes f₁ f₂ ftr) :
+  fcommutes (with_time f₁ (pfun.pure 1)) (with_time f₂ (pfun.pure 1)) (prod.map id ftr) :=
+{ dom_of_dom := by { simpa [with_time, pfun.pure] using H.dom_of_dom, },
+  some_of_some :=
+begin
+  simp [with_time, pfun.pure], rintro a₁ b₁ ⟨a₂, b₂⟩ x hx x rfl,
+  simp, rintro rfl rfl, refine ⟨some (ftr x), _, rfl, rfl⟩,
+  exact H.some_of_some hx, 
+end,
+  none_of_none := by simpa [with_time, pfun.pure] using H.none_of_none }
+
+theorem eq_time_of_fcommutes (H : fcommutes f₁ f₂ ftr) (x : σ₁) :
+  time_iter f₁ (pfun.pure 1) x = time_iter f₂ (pfun.pure 1) (ftr x) :=
+begin
+  have := H.to_time_frespects.to_frespects.eval_eq, simp [pfun.pure] at this, 
+  simp [time_iter, this, pfun.pure],
+end
+
+theorem fcommutes.restrict (H : fcommutes f₁ f₂ ftr) (S : set σ₂) :
+  fcommutes (f₁.res_inter (ftr⁻¹' S)) (f₂.res_inter S) ftr :=
+{ dom_of_dom := λ x, by { simp, rw ← H.to_frespects.dom_iff_dom, tauto, },
+  some_of_some := λ a b, by { simp, intros h₁ h₂, exact ⟨h₁, H.some_of_some h₂⟩, },
+  none_of_none := λ a, by { simp, intros h₁ h₂, exact ⟨h₁, H.none_of_none h₂⟩, } } 
 
 end track_with
 
