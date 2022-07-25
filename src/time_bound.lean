@@ -10,7 +10,7 @@ def code.time : code → ptree →. ℕ
 | (code.node a b) := λ t, (+1) <$> (a.time t) + (b.time t)
 | (code.comp f g) := λ t, (+1) <$> (g.time t) + (g.eval t >>= f.time)
 | (code.case f g) := λ t, (+1) <$> if t.left = ptree.nil then f.time t.right else g.time t.right
-| (code.fix f) := λ t, (+t.sizeof) <$> part_eval.time_iter (λ t' : ptree, (f.eval t').map ptree.to_option) f.time t
+| (code.fix f) := λ t, (+t.sizeof) <$> part_eval.time_iter (f.eval.map ptree.to_option) f.time t
 
 
 lemma add_def (x y : part ℕ) : x + y = x >>= λ x', y >>= (λ y', pure (x' + y')) :=
@@ -23,11 +23,11 @@ begin
   case code.node : c₁ c₂ c₁ih c₂ih { simp [c₁ih, c₂ih], },
   case code.comp : c₁ c₂ c₁ih c₂ih { simp [c₁ih, c₂ih], tauto, },
   case code.case : c₁ c₂ c₁ih c₂ih { simp [c₁ih, c₂ih, apply_ite part.dom], },
-  case code.fix : f ih { rw part_eval.time_iter_dom_iff, simp [ih], }
+  case code.fix : f ih { rw part_eval.time_iter_dom_iff, simp [ih, pfun.map], }
 end
 
-lemma time_dom_iff_eval_to_option_dom (c : code) (v : ptree) : (c.time v).dom ↔ ((c.eval v).map ptree.to_option).dom :=
-by simp [time_dom_iff_eval_dom]
+lemma time_dom_iff_eval_to_option_dom (c : code) (v : ptree) : (c.time v).dom ↔ (c.eval.map ptree.to_option v).dom :=
+by simp [time_dom_iff_eval_dom, pfun.map]
 
 lemma time_dom_eq_eval_dom (c : code) : c.time.dom = c.eval.dom :=
 by { ext, apply time_dom_iff_eval_dom, }
@@ -83,7 +83,7 @@ begin
     rcases relation.refl_trans_gen.cases_tail hr with H | ⟨⟨tl, vl⟩, _, H⟩,
     { simp at H, rw H.2, simp, },
     have t'_le : t' ≤ t, { simp at ht, rcases ht with ⟨_, _, rfl⟩, simp, },
-    simp [part_eval.with_time] at H,  rcases H with ⟨vout, hvt, n, hn, ⟨_, rfl⟩, rfl⟩, 
+    simp [part_eval.with_time, pfun.map] at H,  rcases H with ⟨vout, hvt, n, hn, ⟨_, rfl⟩, rfl⟩, 
     have := ih hvt hn, 
     linarith only [ptree.right_sizeof_le vout, this, t'_le], }
 end
