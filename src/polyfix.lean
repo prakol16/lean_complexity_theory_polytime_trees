@@ -1,7 +1,7 @@
 import polycodable
 import npolynomial
 
-variables {α β : Type}
+variables {α β : Type*}
 
 open part_eval (eval time_iter)
 open polycodable (encode decode)
@@ -49,7 +49,7 @@ begin
   have := eval_sizeof_le_time (part.eq_some_iff.mp sc) H, exact this.trans t_le,
 end
 
-theorem polytime_fun.eval [polycodable α] {f : α → option α} {g : α → α} (hf : polytime_fun f) (p q : polynomial ℕ)
+theorem polytime_fun.eval' [polycodable α] (f : α → option α) (g : α → α) (hf : polytime_fun f) (p q : polynomial ℕ)
   (hg : ∀ x, g x ∈ eval (f : α →. option α) x) (H : ∀ x : α, ∃ t ≤ p.eval (encode x).sizeof, t ∈ time_iter (pfun.res f {s : α | (encode s).sizeof ≤ q.eval (encode x).sizeof}) (pfun.pure 1) x) :
   polytime_fun g :=
 begin
@@ -69,4 +69,21 @@ begin
     simp at h₁, apply le_add_right, refine h₁.trans _, apply monotone_polynomial_nat, apply hP, },
   { intros x' y' _, simp [sc, pfun.map], intros _ H₃, right, simp [encode] at H₃, rcases H₃ with ⟨y₂, _, rfl⟩, use y₂, },
   simp,
+end
+
+theorem polytime_fun.eval [polycodable α] [polycodable β]
+  (f : β → α → option α) (g : β → α → α) (hf : polytime_fun₂ f) (p q : polynomial ℕ)
+  (hg : ∀ s x, g s x ∈ eval (f s : α →. option α) x)
+  (H : ∀ S x, ∃ t ≤ p.eval (encode (S, x)).sizeof, t ∈ time_iter (pfun.res (f S) {s : α | (encode (S, s)).sizeof ≤ q.eval (encode (S, x)).sizeof}) (pfun.pure 1) x) :
+  polytime_fun₂ g :=
+begin
+  have HR : ∀ S : β, part_eval.fcommutes (f S : α →. option α) (λ s : β × α, (f s.1 s.2).map (prod.mk s.1)) (λ x, (S, x)),
+  { refine λ S, ⟨_, _, _⟩, { simp, }, { simp, exact λ _ _ h, h.symm, }, { simp, }, },
+  have := polytime_fun.eval' (λ s : β × α, (f s.1 s.2).map (λ r, (s.1, r))) (λ s, (s.1, g s.1 s.2)) _ p q _ _,
+  { apply polytime_fun.comp polytime_fun.snd this, },
+  { apply polytime_fun.map hf, apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.fst, apply polytime_fun.snd, },
+  { rintro ⟨x₀, x₁⟩, simp, rw (HR x₀).to_frespects.eval_eq x₁, simp, apply hg, },
+  rintro ⟨x₀, x₁⟩, rcases H x₀ x₁ with ⟨t, ht, t_mem⟩, use [t, ht],
+  have HR' := (HR x₀).restrict {s : β × α | (encode s).sizeof ≤ q.eval (encode (x₀, x₁)).sizeof}, simp at HR',
+  rw ← part_eval.eq_time_of_fcommutes HR', exact t_mem,
 end
