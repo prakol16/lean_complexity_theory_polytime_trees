@@ -208,6 +208,38 @@ end
 
 end option
 
+section mk
+
+@[simps]
+def polycodable.mk' {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
+  (polytime_decode : polytime_fun (encode ∘ decode)) : polycodable δ :=
+{ encode := λ x, polycodable.encode (encode x),
+  decode := λ y, decode (polycodable.decode y),
+  decode_encode := by simp [encode_decode],
+  polytime_decode :=
+begin
+  rw polytime_fun_iff', apply polytime_fun.comp, apply polytime_fun.encode,
+  apply polytime_fun.comp polytime_decode, apply polytime_fun.decode',
+end }
+
+lemma polycodable.mk_encode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
+  (polytime_decode : polytime_fun (encode ∘ decode)) :
+  @polytime_fun δ α (polycodable.mk' encode decode encode_decode polytime_decode) _ encode :=
+by { apply polytime_fun.decode, apply polytime_fun.encode, }
+
+lemma polycodable.mk_decode' {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
+  (polytime_decode : polytime_fun (encode ∘ decode)) :
+  @polytime_fun α δ _ (polycodable.mk' encode decode encode_decode polytime_decode) decode :=
+polytime_decode
+
+
+lemma polycodable.mk'_decode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
+  (polytime_decode : polytime_fun (encode ∘ decode)) (f : β → δ) (hf : polytime_fun (encode ∘ f)) :
+  @polytime_fun β δ _ (polycodable.mk' encode decode encode_decode polytime_decode) f :=
+hf
+
+end mk
+
 section sum
 
 end sum
