@@ -208,7 +208,7 @@ begin
   apply polytime_fun.comp₂ hh polytime_fun.id, apply polytime_fun.comp polytime_fun.iget hf,
 end
 
-lemma polytime_fun.map {f : α → option β} {g : α → β → γ} (hf : polytime_fun f) (hg : polytime_fun₂ g) :
+lemma polytime_fun.option_map {f : α → option β} {g : α → β → γ} (hf : polytime_fun f) (hg : polytime_fun₂ g) :
   polytime_fun (λ x, (f x).map (g x)) :=
 begin
   convert_to polytime_fun (λ x, (f x).elim none (λ r, some (g x r))),

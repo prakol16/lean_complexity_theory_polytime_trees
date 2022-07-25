@@ -81,7 +81,7 @@ begin
   { refine λ S, ⟨_, _, _⟩, { simp, }, { simp, exact λ _ _ h, h.symm, }, { simp, }, },
   have := polytime_fun.eval' (λ s : β × α, (f s.1 s.2).map (λ r, (s.1, r))) (λ s, (s.1, g s.1 s.2)) _ p q _ _,
   { apply polytime_fun.comp polytime_fun.snd this, },
-  { apply polytime_fun.map hf, apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.fst, apply polytime_fun.snd, },
+  { apply polytime_fun.option_map hf, apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.fst, apply polytime_fun.snd, },
   { rintro ⟨x₀, x₁⟩, simp, rw (HR x₀).to_frespects.eval_eq x₁, simp, apply hg, },
   rintro ⟨x₀, x₁⟩, rcases H x₀ x₁ with ⟨t, ht, t_mem⟩, use [t, ht],
   have HR' := (HR x₀).restrict {s : β × α | (encode s).sizeof ≤ q.eval (encode (x₀, x₁)).sizeof}, simp at HR',
