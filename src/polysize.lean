@@ -56,3 +56,10 @@ lemma polysize_fun.comp₃ {f : α → β → γ → δ} {g : ε → α} {h : ε
   polysize_fun (λ s, f (g s) (h s) (i s)) :=
 polysize_fun.comp hf (polysize_fun.pair hg (polysize_fun.pair hh hi))
 
+lemma polysize_fun_of_fin_range [fintype β] (f : α → β) : polysize_fun f :=
+begin
+  haveI : nonempty β := ⟨polycodable.decode ptree.nil⟩,
+  let B := ((finset.image (λ x : β, (encode x).sizeof) finset.univ).max' _ : ℕ),
+  { use B, intro x, simp, apply finset.le_max', simp, },
+  simpa using finset.univ_nonempty,
+end

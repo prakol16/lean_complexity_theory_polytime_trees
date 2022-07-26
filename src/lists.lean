@@ -309,5 +309,36 @@ theorem polytime_fun.map {f : β → γ → γ} {l : β → list γ}
   polytime_fun (λ s, (l s).map (f s)) :=
 polytime_fun.map_aux H_enc hf hl
 
+lemma foldr_eta' (l₁ l₂ : list α) : l₁.foldr list.cons l₂ = l₁ ++ l₂ :=
+by { induction l₁ with hd tl ih, { simp, }, simpa, }
+
+theorem polytime_fun.append : polytime_fun₂ (@list.append γ) :=
+begin
+  change polytime_fun₂ (λ (l₁ l₂ : list γ), l₁ ++ l₂), simp_rw ← foldr_eta',
+  apply polytime_fun.foldr, simp only [polytime_fun₃], apply polytime_fun.comp₂ polytime_fun.cons, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, apply polytime_fun.fst, apply polytime_fun.snd,
+  simp_rw foldr_eta', use polynomial.monomial 1 1, rintro ⟨⟨a, b⟩, c, d⟩, zify, simp, linarith only,
+end
+
+section bool
+
+lemma polytime_fun.all {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f) (hl : polytime_fun l) :
+  polytime_fun (λ s, (l s).all (f s)) :=
+begin
+  simp only [list.all], apply polytime_fun.foldr,
+  simp only [polytime_fun₃], apply polytime_fun.comp₂ polytime_fun.band,
+  apply polytime_fun.comp₂ hf, apply polytime_fun.fst, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, exact hl, apply polytime_fun.const,
+  { apply polysize_fun_of_fin_range, },
+end
+
+lemma polytime_fun.any {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f) (hl : polytime_fun l) :
+  polytime_fun (λ s, (l s).any (f s)) :=
+begin
+  simp only [list.any], apply polytime_fun.foldr,
+  simp only [polytime_fun₃], apply polytime_fun.comp₂ polytime_fun.bor,
+  apply polytime_fun.comp₂ hf, apply polytime_fun.fst, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, exact hl, apply polytime_fun.const,
+  { apply polysize_fun_of_fin_range, },
+end
+
+end bool
 
 end list
