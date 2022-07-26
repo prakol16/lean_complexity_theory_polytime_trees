@@ -39,11 +39,11 @@ do `(polytime_fun %%s) ← tactic.target,
 
 meta def apply_polyfun.comp (md : transparency) : tactic ℕ :=
 do fail_if_success `[exact polytime_fun.const _],
-   fail_if_success `[apply polytime_fun.pair],
+   fail_if_success (to_expr ``(polytime_fun.pair) >>= λ e, apply e {md := md}),
    n ← get_num_params, guard (0 < n ∧ n ≤ polytime_fun_lemmas.length),
    s ← resolve_name (polytime_fun_comp_lemmas.inth (n-1)),
    s' ← to_expr s,
-   `[apply %%s'],
+   apply s' {md := md},
    when (n = 1) (fail_if_success `[any_goals { exact polytime_fun.id }]),
    return (n-1)
 
@@ -69,6 +69,11 @@ trace_fn polyfun_core
 
 end interactive
 
+end tactic
+
+section
+
+
 attribute [polyfun] polytime_fun.fst
 attribute [polyfun] polytime_fun.snd
 attribute [polyfun] polytime_fun.pair
@@ -76,7 +81,19 @@ attribute [polyfun] polytime_fun.band
 attribute [polyfun] polytime_fun.bor
 
 variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
-example {f : α → β → bool} (hf : polytime_fun₂ f) : polytime_fun₃ (λ (x y) (z : bool), z && (f y x)) :=
+example {f : α → β → bool} (hf : polytime_fun₂ f) : polytime_fun₃ (λ x y z, z && (f y x)) :=
 by { polyfun, }
 
-end tactic
+attribute [polyfun] polytime_fun.some
+attribute [polyfun] polytime_fun.option_map
+attribute [polyfun] polytime_fun.option_elim
+
+example {f : α → option β} {g : α → β → option γ} (hf : polytime_fun f) (hg : polytime_fun₂ g) :
+  polytime_fun (λ x, (f x).bind (g x)) :=
+begin
+  convert_to polytime_fun (λ x, (f x).elim none (g x)),
+  { ext x : 1, cases (f x); simp, },
+  polyfun,
+end
+
+end
