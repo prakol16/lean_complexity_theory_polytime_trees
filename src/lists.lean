@@ -115,7 +115,8 @@ lemma polytime_fun.foldl_step {f : β → α → γ → α} (hf : polytime_fun�
 begin
   letI := lea H_enc,
   have := polytime_fun.head_aux H_enc, have := polytime_fun.tail_aux H_enc, have := polytime_fun.is_empty_aux H_enc,
-  delta foldl_step, polyfun,
+  delta foldl_step,
+  polyfun,
 end
 
 section encode_sizeof
@@ -300,11 +301,22 @@ lemma polytime_fun.is_empty : polytime_fun (@list.empty γ) :=
 polytime_fun.is_empty_aux H_enc
 
 @[polyfun]
+lemma polytime_fun.head' : polytime_fun (@list.head' γ) :=
+begin
+  convert_to polytime_fun (λ l : list γ, if l.empty then none else some (@list.head _ ⟨decode ptree.nil⟩ l)),
+  { ext l : 1, cases l; simp, }, polyfun,
+end
+
+@[polyfun]
 theorem polytime_fun.foldr {f : β → γ → α → α} {l : β → list γ} {acc : β → α} 
   (hf : polytime_fun₃ f) (hl : polytime_fun l) (hacc : polytime_fun acc) 
   (hs : polysize_fun₃ (λ (s : β) (x : α) (l : list γ), l.foldr (f s) x)) :
   polytime_fun (λ s, (l s).foldr (f s) (acc s)) :=
 polytime_fun.foldr_aux H_enc hf hl hacc hs
+
+@[polyfun]
+theorem polytime_fun.reverse : polytime_fun (@list.reverse γ) :=
+polytime_fun.reverse_aux H_enc
 
 @[polyfun]
 theorem polytime_fun.foldl {f : β → α → γ → α} {l : β → list γ} {acc : β → α} 
@@ -331,14 +343,22 @@ end
 
 section bool
 
+@[polyfun]
 lemma polytime_fun.all {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f) (hl : polytime_fun l) :
   polytime_fun (λ s, (l s).all (f s)) :=
 by { simp only [list.all], polyfun, apply polysize_fun_of_fin_range, }
 
+@[polyfun]
 lemma polytime_fun.any {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f) (hl : polytime_fun l) :
   polytime_fun (λ s, (l s).any (f s)) :=
 by { simp only [list.any], polyfun, apply polysize_fun_of_fin_range, }
 
 end bool
+
+lemma polytime_fun.last : polytime_fun (@list.last' α) :=
+begin
+  convert_to polytime_fun (λ l : list α, l.reverse.head'), { ext l : 1, induction l using list.reverse_rec_on; simp, },
+  polyfun,
+end
 
 end list

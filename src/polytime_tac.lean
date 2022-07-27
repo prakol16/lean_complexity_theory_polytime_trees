@@ -48,6 +48,7 @@ do fail_if_success `[exact polytime_fun.const _],
    s ← resolve_name (polytime_fun_comp_lemmas.inth (n-1)),
    s' ← to_expr s,
    apply s' {md := md},
+   try `[ any_goals { apply_instance, } ],
    when (n = 1) (fail_if_success `[swap, exact polytime_fun.id]),
    return (n-1)
 
