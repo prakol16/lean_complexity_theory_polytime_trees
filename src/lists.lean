@@ -108,11 +108,15 @@ lemma polytime_fun.cons_aux : by haveI := lea H_enc; exact polytime_fun₂ (@lis
 by { intro x, dunfold polycodable.encode, cases x; simp [lea_encode], }⟩
 
 lemma polytime_fun.is_empty_aux : by haveI := lea H_enc; exact polytime_fun (@list.empty γ) :=
-by { letI := lea H_enc, classical, convert_to polytime_fun (λ l : list γ, (l = [] : bool)), { ext x, cases x; simp, }, apply polytime_fun.eq_const polytime_fun.id, }
+by { letI := lea H_enc, classical, convert_to polytime_fun (λ l : list γ, (l = [] : bool)), { ext x, cases x; simp, }, polyfun, }
 
 lemma polytime_fun.foldl_step {f : β → α → γ → α} (hf : polytime_fun₃ f) :
   (by haveI := lea H_enc; exact (polytime_fun₂ (λ d, foldl_step (f d)))) :=
-by { letI := lea H_enc, apply polytime_fun.ite, simp, apply polytime_fun.comp, apply polytime_fun.is_empty_aux, apply polytime_fun.comp polytime_fun.fst polytime_fun.snd, apply polytime_fun.const, apply polytime_fun.comp, apply polytime_fun.some, apply polytime_fun.pair, apply polytime_fun.comp, apply polytime_fun.tail_aux, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp₃ hf, apply polytime_fun.fst, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.head_aux, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, }
+begin
+  letI := lea H_enc,
+  have := polytime_fun.head_aux H_enc, have := polytime_fun.tail_aux H_enc, have := polytime_fun.is_empty_aux H_enc,
+  delta foldl_step, polyfun,
+end
 
 section encode_sizeof
 
@@ -179,7 +183,7 @@ theorem polytime_fun.foldl_aux {f : β → α → γ → α} {l : β → list γ
 begin
   letI := lea H_enc,
   suffices : polytime_fun₃ (λ s (L : list γ) (a : α), (@list.nil γ, L.foldl (f s) a)),
-  { have pf : polytime_fun (λ s, (s, l s, acc s)) := polytime_fun.pair polytime_fun.id (polytime_fun.pair hl hacc),
+  { have pf : polytime_fun (λ s, (s, l s, acc s)) := by polyfun,
     exact polytime_fun.comp polytime_fun.snd (polytime_fun.comp this pf), },
   cases hs with ps hps,
   refine polytime_fun.eval (λ s : β, foldl_step (f s)) (λ (s : β) (x : list γ × α), ([], x.1.foldl (f s) x.2))
@@ -205,7 +209,7 @@ begin
   convert_to polytime_fun (λ l : list γ, l.foldl (λ acc hd, hd :: acc) []),
   { ext l : 1, simp [foldl_cons_eq_reverse], },
   apply polytime_fun.foldl_aux,
-  { simp only [polytime_fun₃], apply polytime_fun.comp₂ (polytime_fun.cons_aux H_enc), apply polytime_fun.comp polytime_fun.snd polytime_fun.snd, apply polytime_fun.comp polytime_fun.fst polytime_fun.snd, },
+  { have := polytime_fun.cons_aux H_enc, polyfun, },
   { exact polytime_fun.id, }, { exact polytime_fun.const _, },
   simp [foldl_cons_eq_reverse], use polynomial.monomial 1 1,
   rintro ⟨a, b, c⟩, zify, simp, linarith only,
@@ -218,7 +222,7 @@ theorem polytime_fun.foldr_aux {f : β → γ → α → α} {l : β → list γ
 begin
   letI := lea H_enc,
   simp only [← list.foldl_reverse], apply polytime_fun.foldl_aux,
-  { apply polytime_fun.comp₃ hf polytime_fun.fst; apply polytime_fun.comp, any_goals { exact polytime_fun.snd, }, exact polytime_fun.fst, },
+  { polyfun, },
   { apply polytime_fun.comp (polytime_fun.reverse_aux H_enc) hl, },
   { exact hacc, },
   simp only [← list.foldr_reverse],
@@ -243,13 +247,13 @@ begin
   convert_to polytime_fun (λ s : β, (l s).foldr (λ a b, f s a :: b) []),
   { ext s : 1, simp [foldr_eq_map], },
   apply polytime_fun.foldr_aux,
-  { apply polytime_fun.comp₂ (polytime_fun.cons_aux H_enc), apply polytime_fun.comp₂ hf, exact polytime_fun.fst, all_goals { apply polytime_fun.comp, }, any_goals { apply polytime_fun.snd, }, apply polytime_fun.fst, },
+  { have := polytime_fun.cons_aux H_enc, polyfun, },
   { exact hl, }, { apply polytime_fun.const, },
   simp only [foldr_eq_map],
   apply polysize_fun.comp₂ (polysize_fun.append H_enc),
   { refine polysize_fun.comp (polysize_fun_map_polysize H_enc (polysize₂_of_polytime₂ hf)) (_ : polysize_fun (λ s : β × list γ × list γ, (s.1, s.2.2))), 
-    apply polysize_of_polytime_fun, apply polytime_fun.pair polytime_fun.fst, apply polytime_fun.comp polytime_fun.snd polytime_fun.snd, },
-  apply polysize_of_polytime_fun, apply polytime_fun.comp polytime_fun.fst polytime_fun.snd,
+    apply polysize_of_polytime_fun, polyfun, },
+  apply polysize_of_polytime_fun, polyfun,
 end
 
 end list
@@ -267,7 +271,7 @@ lemma H_enc {γ : Type*} [polycodable γ] :
 begin
   suffices : polytime_fun (λ l : list ptree, l.map (encode ∘ (@decode γ _))),
   { rcases this with ⟨c, pc, s⟩, use [c, pc], intro x, specialize s x.equiv_list, simp [encode, list_ptree_encode, lea_encode] at s, simp [s], },
-  apply polytime_fun.map_aux, simp only [polytime_fun₂, function.uncurry], apply polytime_fun.comp, apply polytime_fun.comp, apply polytime_fun.encode, apply polytime_fun.decode', apply polytime_fun.snd, apply polytime_fun.id,
+  apply polytime_fun.map_aux; polyfun,
 end
 
 end list_ptree
@@ -279,30 +283,37 @@ variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
 instance : polycodable (list α) :=
 lea H_enc
 
+@[polyfun]
 lemma polytime_fun.head : polytime_fun (@list.head γ ⟨decode ptree.nil⟩) :=
 polytime_fun.head_aux H_enc
 
+@[polyfun]
 lemma polytime_fun.tail : polytime_fun (@list.tail γ) :=
 polytime_fun.tail_aux H_enc
 
+@[polyfun]
 lemma polytime_fun.cons : polytime_fun₂ (@list.cons γ) :=
 polytime_fun.cons_aux H_enc
 
+@[polyfun]
 lemma polytime_fun.is_empty : polytime_fun (@list.empty γ) :=
 polytime_fun.is_empty_aux H_enc
 
+@[polyfun]
 theorem polytime_fun.foldr {f : β → γ → α → α} {l : β → list γ} {acc : β → α} 
   (hf : polytime_fun₃ f) (hl : polytime_fun l) (hacc : polytime_fun acc) 
   (hs : polysize_fun₃ (λ (s : β) (x : α) (l : list γ), l.foldr (f s) x)) :
   polytime_fun (λ s, (l s).foldr (f s) (acc s)) :=
 polytime_fun.foldr_aux H_enc hf hl hacc hs
 
+@[polyfun]
 theorem polytime_fun.foldl {f : β → α → γ → α} {l : β → list γ} {acc : β → α} 
   (hf : polytime_fun₃ f) (hl : polytime_fun l) (hacc : polytime_fun acc) 
   (hs : polysize_fun₃ (λ (s : β) (x : α) (l : list γ), l.foldl (f s) x)) :
   polytime_fun (λ s, (l s).foldl (f s) (acc s)) :=
 polytime_fun.foldl_aux H_enc hf hl hacc hs
 
+@[polyfun]
 theorem polytime_fun.map {f : β → γ → γ} {l : β → list γ}
   (hf : polytime_fun₂ f)
   (hl : polytime_fun l) :
@@ -314,30 +325,19 @@ by { induction l₁ with hd tl ih, { simp, }, simpa, }
 
 theorem polytime_fun.append : polytime_fun₂ (@list.append γ) :=
 begin
-  change polytime_fun₂ (λ (l₁ l₂ : list γ), l₁ ++ l₂), simp_rw ← foldr_eta',
-  apply polytime_fun.foldr, simp only [polytime_fun₃], apply polytime_fun.comp₂ polytime_fun.cons, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, apply polytime_fun.fst, apply polytime_fun.snd,
-  simp_rw foldr_eta', use polynomial.monomial 1 1, rintro ⟨⟨a, b⟩, c, d⟩, zify, simp, linarith only,
+  change polytime_fun₂ (λ (l₁ l₂ : list γ), l₁ ++ l₂), simp_rw ← foldr_eta', polyfun,
+  use polynomial.monomial 1 1, rintro ⟨⟨a, b⟩, c, d⟩,  simp_rw foldr_eta', zify, simp, linarith only,
 end
 
 section bool
 
 lemma polytime_fun.all {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f) (hl : polytime_fun l) :
   polytime_fun (λ s, (l s).all (f s)) :=
-begin
-  simp only [list.all], apply polytime_fun.foldr,
-  simp only [polytime_fun₃], apply polytime_fun.comp₂ polytime_fun.band,
-  apply polytime_fun.comp₂ hf, apply polytime_fun.fst, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, exact hl, apply polytime_fun.const,
-  { apply polysize_fun_of_fin_range, },
-end
+by { simp only [list.all], polyfun, apply polysize_fun_of_fin_range, }
 
 lemma polytime_fun.any {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f) (hl : polytime_fun l) :
   polytime_fun (λ s, (l s).any (f s)) :=
-begin
-  simp only [list.any], apply polytime_fun.foldr,
-  simp only [polytime_fun₃], apply polytime_fun.comp₂ polytime_fun.bor,
-  apply polytime_fun.comp₂ hf, apply polytime_fun.fst, apply polytime_fun.comp, apply polytime_fun.fst, apply polytime_fun.snd, apply polytime_fun.comp, apply polytime_fun.snd, apply polytime_fun.snd, exact hl, apply polytime_fun.const,
-  { apply polysize_fun_of_fin_range, },
-end
+by { simp only [list.any], polyfun, apply polysize_fun_of_fin_range, }
 
 end bool
 

@@ -1,4 +1,4 @@
-import polycodable
+import polycodable_init
 
 @[user_attribute]
 meta def polyfun : user_attribute :=
@@ -21,6 +21,10 @@ meta def unfold_polytime (md : transparency) : tactic unit :=
 do dunfold_target (``function.uncurry :: polytime_fun_lemmas.tail),
    try dsimp_target, skip
 
+-- In order to help resolve polytime_fun of propositions (which are converted to bool's)
+meta def simp_to_bool : tactic unit :=
+`[simp only [bool.to_bool_not, bool.to_bool_and, bool.to_bool_or, bool.to_bool_coe]]
+
 -- Please help, idk how to write tactics
 meta def is_polycodable (e : expr) : tactic bool :=
 (do
@@ -32,8 +36,8 @@ meta def is_polycodable (e : expr) : tactic bool :=
 meta def get_num_params : tactic ℕ :=
 do `(polytime_fun %%s) ← tactic.target,
     guard s.is_lambda,
-    mv ← mk_mvar,
-    let e := s.instantiate_lambdas [mv],
+    mv ← mk_meta_var s.binding_domain,
+    e ←  instantiate_mvars (s.instantiate_lambdas [mv]),
     f ← mfilter is_polycodable e.get_app_args,
     return f.length
 
@@ -44,7 +48,7 @@ do fail_if_success `[exact polytime_fun.const _],
    s ← resolve_name (polytime_fun_comp_lemmas.inth (n-1)),
    s' ← to_expr s,
    apply s' {md := md},
-   when (n = 1) (fail_if_success `[any_goals { exact polytime_fun.id }]),
+   when (n = 1) (fail_if_success `[swap, exact polytime_fun.id]),
    return (n-1)
 
 meta def polyfun_tactics (md : transparency := reducible) : list (tactic string) :=
@@ -52,6 +56,7 @@ meta def polyfun_tactics (md : transparency := reducible) : list (tactic string)
   apply_rules [] [``polyfun] 50 { md := md }
                         >> pure "apply_rules with polyfun", 
   unfold_polytime md >> pure "dunfold_target polytime_fun_lemmas.tail",
+  simp_to_bool >> pure "simp only [bool.to_bool_not, bool.to_bool_and, bool.to_bool_or]",
   apply_polyfun.comp md >>= λ n, pure ("apply " ++ (to_string $ polytime_fun_comp_lemmas.inth (n-1)))
 ]
 
@@ -73,27 +78,17 @@ end tactic
 
 section
 
-
-attribute [polyfun] polytime_fun.fst
-attribute [polyfun] polytime_fun.snd
-attribute [polyfun] polytime_fun.pair
-attribute [polyfun] polytime_fun.band
-attribute [polyfun] polytime_fun.bor
-
-variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
-example {f : α → β → bool} (hf : polytime_fun₂ f) : polytime_fun₃ (λ x y z, z && (f y x)) :=
-by { polyfun, }
-
-attribute [polyfun] polytime_fun.some
-attribute [polyfun] polytime_fun.option_map
-attribute [polyfun] polytime_fun.option_elim
-
-example {f : α → option β} {g : α → β → option γ} (hf : polytime_fun f) (hg : polytime_fun₂ g) :
-  polytime_fun (λ x, (f x).bind (g x)) :=
-begin
-  convert_to polytime_fun (λ x, (f x).elim none (g x)),
-  { ext x : 1, cases (f x); simp, },
-  polyfun,
-end
+attribute [polyfun] 
+  polytime_fun.fst
+  polytime_fun.snd
+  polytime_fun.pair
+  polytime_fun.node
+  polytime_fun.polytime_code
+  polytime_fun.ptree_left
+  polytime_fun.ptree_right
+  polytime_fun.encode
+  polytime_fun.decode'
+@[polyfun]
+lemma polytime_fun.id' {α} [polycodable α] : polytime_fun (λ x : α, x) := polytime_fun.id
 
 end
