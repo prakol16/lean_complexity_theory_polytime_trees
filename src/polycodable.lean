@@ -119,6 +119,13 @@ begin
   polyfun,
 end
 
+@[polyfun]
+lemma polytime_fun.get_or_else : polytime_fun₂ (@option.get_or_else α) :=
+begin
+  convert_to polytime_fun₂ (λ (a : option α) (b : α), a.elim b id),
+  { ext a b, cases a; simp, }, polyfun,
+end
+
 end option
 
 section mk
@@ -138,12 +145,12 @@ lemma polycodable.mk_encode {δ : Type*} (encode : δ → α) (decode : α → �
   @polytime_fun δ α (polycodable.mk' encode decode encode_decode polytime_decode) _ encode :=
 by { apply polytime_fun.id, }
 
+@[polyfun]
 lemma polycodable.mk_decode' {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
   (polytime_decode : polytime_fun (encode ∘ decode)) :
   @polytime_fun α δ _ (polycodable.mk' encode decode encode_decode polytime_decode) decode :=
 polytime_decode
 
-@[polyfun]
 lemma polycodable.mk_decode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
   (polytime_decode : polytime_fun (encode ∘ decode)) (f : β → δ) (hf : polytime_fun (encode ∘ f)) :
   @polytime_fun β δ _ (polycodable.mk' encode decode encode_decode polytime_decode) f :=

@@ -26,6 +26,9 @@ instance : polycodable ptree :=
 
 variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
 
+@[priority 50]
+instance nonempty_of_polycodable : nonempty α := ⟨decode ptree.nil⟩
+
 lemma polytime_fun_iff' (f : ptree → ptree) :
   (∃ (c : code) (pc : polytime c), ∀ x, c.eval x = part.some (f x)) ↔ polytime_fun f := iff.rfl
 

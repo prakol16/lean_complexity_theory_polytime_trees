@@ -19,7 +19,7 @@ meta def polytime_fun_comp_lemmas : list name :=
 
 meta def unfold_polytime (md : transparency) : tactic unit :=
 do dunfold_target (``function.uncurry :: polytime_fun_lemmas.tail),
-   try dsimp_target, skip
+   try dsimp_target
 
 -- In order to help resolve polytime_fun of propositions (which are converted to bool's)
 meta def simp_to_bool : tactic unit :=

@@ -284,9 +284,10 @@ variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
 instance : polycodable (list α) :=
 lea H_enc
 
-@[polyfun]
 lemma polytime_fun.head : polytime_fun (@list.head γ ⟨decode ptree.nil⟩) :=
 polytime_fun.head_aux H_enc
+
+local attribute [polyfun] polytime_fun.head
 
 @[polyfun]
 lemma polytime_fun.tail : polytime_fun (@list.tail γ) :=
@@ -306,6 +307,15 @@ begin
   convert_to polytime_fun (λ l : list γ, if l.empty then none else some (@list.head _ ⟨decode ptree.nil⟩ l)),
   { ext l : 1, cases l; simp, }, polyfun,
 end
+
+@[polyfun]
+lemma polytime_fun.ihead [inhabited γ] : polytime_fun (@list.head γ _) :=
+begin
+  convert_to polytime_fun (λ l : list γ, l.head'.iget),
+  { ext l, cases l; simp, }, polyfun,
+end
+
+local attribute [-polyfun] polytime_fun.head
 
 @[polyfun]
 theorem polytime_fun.foldr {f : β → γ → α → α} {l : β → list γ} {acc : β → α} 
@@ -335,11 +345,15 @@ polytime_fun.map_aux H_enc hf hl
 lemma foldr_eta' (l₁ l₂ : list α) : l₁.foldr list.cons l₂ = l₁ ++ l₂ :=
 by { induction l₁ with hd tl ih, { simp, }, simpa, }
 
+@[polyfun]
 theorem polytime_fun.append : polytime_fun₂ (@list.append γ) :=
 begin
   change polytime_fun₂ (λ (l₁ l₂ : list γ), l₁ ++ l₂), simp_rw ← foldr_eta', polyfun,
   use polynomial.monomial 1 1, rintro ⟨⟨a, b⟩, c, d⟩,  simp_rw foldr_eta', zify, simp, linarith only,
 end
+
+@[polyfun]
+lemma polytime_fun.append₂ : polytime_fun₂ (λ (a b : list α), a ++ b) := polytime_fun.append
 
 section bool
 
@@ -359,6 +373,45 @@ lemma polytime_fun.last : polytime_fun (@list.last' α) :=
 begin
   convert_to polytime_fun (λ l : list α, l.reverse.head'), { ext l : 1, induction l using list.reverse_rec_on; simp, },
   polyfun,
+end
+
+lemma encode_list_filter_sizeof_le (l : list γ) (P : γ → Prop) [decidable_pred P] :
+  (encode (l.filter P)).sizeof ≤ (encode l).sizeof :=
+begin
+  induction l with hd tl ih, { simp, }, by_cases H : P hd,
+  { simpa [H], }, { simp [H], linarith only [ih], },
+end
+
+lemma polytime_fun.filter {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f)
+  (hl : polytime_fun l) : polytime_fun (λ s, (l s).filter (λ x, f s x)) :=
+begin
+  have filter_eq : ∀ (xs : list α) (l : list α) (P : α → bool), l.foldr (λ hd acc, if P hd then hd :: acc else acc) xs = (l.filter (λ x, P x)) ++ xs,
+  { intros xs l P, induction l with hd tl ih, { simp, }, cases H : P hd; simpa [H], },
+  convert_to polytime_fun (λ s : β, (l s).foldr (λ hd acc, if f s hd then hd :: acc else acc) []),
+  { ext s : 1, simp [filter_eq], }, polyfun,
+  change polysize_fun₃ (λ s xs l, _), simp_rw filter_eq,
+  apply polysize_fun.comp₂, { apply polysize_of_polytime_fun, polyfun, },
+  { use polynomial.monomial 1 1, rintro ⟨a, b, c⟩, simp, refine (encode_list_filter_sizeof_le _ _).trans _, linarith only, },
+  { apply polysize_of_polytime_fun, polyfun, },
+end
+
+@[simp]
+def list.izip {α β : Type*} [inhabited α] [inhabited β] : list α → list β → list (α × β)
+| (x :: xs) (y :: ys) := (x, y) :: (xs.izip ys)
+| [] (y :: ys) := (default, y) :: (list.izip [] ys)
+| (x :: xs) [] := (x, default) :: (list.izip xs [])
+| [] [] := []
+
+def list.izip₁ {α β : Type*} [inhabited α] [inhabited β] (l₁ : list α) (l₂ : list β) : list (α × β) :=
+l₁.izip (l₂.take l₁.length)
+
+lemma list.izip_eq {α β : Type*} [inhabited α] [inhabited β] (l₁ : list α) (l₂ : list β) (xs : list (α × β)) :
+  l₁.foldl (λ (acc : list (α × β) × list β) (hd : α), (acc.1 ++ [(hd, l₂.head)], acc.2.tail)) (xs, l₂) = (l₁.izip₁ l₂, l₂.drop l₁.length) :=
+sorry
+
+lemma polytime_fun.izip [inhabited α] [inhabited β] : polytime_fun₂ (@list.izip α β _ _) :=
+begin
+  sorry,
 end
 
 end list
