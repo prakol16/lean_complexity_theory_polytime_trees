@@ -140,13 +140,17 @@ end
   ((encode (a ++ b)).sizeof : ℤ) = ((encode a).sizeof : ℤ) + (encode b).sizeof - 1 :=
 by { induction a with hd tl ih, { simp, }, simp [ih], ring, }
 
-lemma encode_sizeof_le_of_infix {a b : list γ} (h : a <:+: b) : by haveI := lea H_enc; exact
+lemma encode_sizeof_le_of_sublist {a b : list γ} (h : a <+ b) : by haveI := lea H_enc; exact
   (encode a).sizeof ≤ (encode b).sizeof :=
 begin
-  letI := lea H_enc, rcases h with ⟨s, t, rfl⟩,
-  have i₁ := one_le_encode_sizeof s, have i₂ := one_le_encode_sizeof t,
-  zify at *, simp, linarith,
+  induction h, { simp, },
+  case list.sublist.cons : l₁ l₂ s₁ H ih { refine ih.trans _, simp, },
+  case list.sublist.cons2 : l₁ l₂ s₁ H ih { simpa, },
 end
+
+lemma encode_sizeof_le_of_infix {a b : list γ} (h : a <:+: b) : by haveI := lea H_enc; exact
+  (encode a).sizeof ≤ (encode b).sizeof :=
+encode_sizeof_le_of_sublist H_enc h.sublist
 
 lemma encode_list_sizeof (l : list γ) : by haveI := lea H_enc; exact 
   (encode l).sizeof = (l.map (λ x, (encode x).sizeof)).sum + l.length + 1 :=
@@ -284,6 +288,27 @@ variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
 instance : polycodable (list α) :=
 lea H_enc
 
+@[higher_order]
+lemma polycodable.list_encode (l : list α) :
+  encode l = ptree.equiv_list.symm (l.map encode) := rfl
+@[higher_order]
+lemma polycodable.list_decode (v : ptree) :
+  @decode (list α) _ v = (ptree.equiv_list v).map decode := rfl
+@[simp] lemma polycodable.list_ptree_encode :
+  @encode (list ptree) _ = ptree.equiv_list.symm :=
+by { ext l, rw polycodable.list_encode, simp, erw l.map_id, }
+@[simp] lemma polycodable.list_ptree_decode :
+  @decode (list ptree) _ = ptree.equiv_list :=
+by { ext l, rw polycodable.list_decode, erw l.equiv_list.map_id, }
+
+@[polyfun]
+lemma polytime_fun.ptree_equiv_list : polytime_fun ptree.equiv_list :=
+by { rw ← polycodable.list_ptree_decode, polyfun, }
+@[polyfun]
+lemma polytime_fun.ptree_equiv_list_symm : polytime_fun ptree.equiv_list.symm :=
+by { rw ← polycodable.list_ptree_encode, polyfun, }
+
+
 lemma polytime_fun.head : polytime_fun (@list.head γ ⟨decode ptree.nil⟩) :=
 polytime_fun.head_aux H_enc
 
@@ -336,11 +361,21 @@ theorem polytime_fun.foldl {f : β → α → γ → α} {l : β → list γ} {a
 polytime_fun.foldl_aux H_enc hf hl hacc hs
 
 @[polyfun]
-theorem polytime_fun.map {f : β → γ → γ} {l : β → list γ}
+theorem polytime_fun.map {f : β → γ → α} {l : β → list γ}
   (hf : polytime_fun₂ f)
   (hl : polytime_fun l) :
   polytime_fun (λ s, (l s).map (f s)) :=
-polytime_fun.map_aux H_enc hf hl
+begin
+  have H₁ : polytime_fun (λ l : list γ, l.map encode),
+  { apply polytime_fun.decode, simp, apply polytime_fun.encode, },
+  have H₂ : polytime_fun (λ (S : β × list ptree), S.2.map (encode ∘ (f S.1) ∘ decode)),
+  { apply polytime_fun.map_aux H_enc; polyfun, },
+  have H₃ : polytime_fun (λ l : list ptree, l.map (@decode α _)),
+  { apply polytime_fun.decode, simp [polycodable.list_encode'],
+    apply polytime_fun.comp polytime_fun.ptree_equiv_list_symm, simp, apply polytime_fun.map_aux H_enc; polyfun, },
+  have H₁' : polytime_fun (λ (s : β), (s, (l s).map encode)), { polyfun, },
+  convert H₃.comp (H₂.comp H₁'), ext, simp,
+end
 
 lemma foldr_eta' (l₁ l₂ : list α) : l₁.foldr list.cons l₂ = l₁ ++ l₂ :=
 by { induction l₁ with hd tl ih, { simp, }, simpa, }
@@ -369,6 +404,7 @@ by { simp only [list.any], polyfun, apply polysize_fun_of_fin_range, }
 
 end bool
 
+@[polyfun]
 lemma polytime_fun.last : polytime_fun (@list.last' α) :=
 begin
   convert_to polytime_fun (λ l : list α, l.reverse.head'), { ext l : 1, induction l using list.reverse_rec_on; simp, },
@@ -376,11 +412,7 @@ begin
 end
 
 lemma encode_list_filter_sizeof_le (l : list γ) (P : γ → Prop) [decidable_pred P] :
-  (encode (l.filter P)).sizeof ≤ (encode l).sizeof :=
-begin
-  induction l with hd tl ih, { simp, }, by_cases H : P hd,
-  { simpa [H], }, { simp [H], linarith only [ih], },
-end
+  (encode (l.filter P)).sizeof ≤ (encode l).sizeof := encode_sizeof_le_of_sublist _ (list.filter_sublist _)
 
 lemma polytime_fun.filter {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f)
   (hl : polytime_fun l) : polytime_fun (λ s, (l s).filter (λ x, f s x)) :=
@@ -402,16 +434,140 @@ def list.izip {α β : Type*} [inhabited α] [inhabited β] : list α → list �
 | (x :: xs) [] := (x, default) :: (list.izip xs [])
 | [] [] := []
 
-def list.izip₁ {α β : Type*} [inhabited α] [inhabited β] (l₁ : list α) (l₂ : list β) : list (α × β) :=
-l₁.izip (l₂.take l₁.length)
+def unary_nat_encode : polycodable ℕ := 
+polycodable.of_equiv equiv.list_unit_equiv.symm
 
-lemma list.izip_eq {α β : Type*} [inhabited α] [inhabited β] (l₁ : list α) (l₂ : list β) (xs : list (α × β)) :
-  l₁.foldl (λ (acc : list (α × β) × list β) (hd : α), (acc.1 ++ [(hd, l₂.head)], acc.2.tail)) (xs, l₂) = (l₁.izip₁ l₂, l₂.drop l₁.length) :=
-sorry
+local attribute [instance] unary_nat_encode
 
-lemma polytime_fun.izip [inhabited α] [inhabited β] : polytime_fun₂ (@list.izip α β _ _) :=
+lemma unary_nat_encode_eq (n : ℕ) : encode n = encode (list.repeat () n) := rfl
+
+@[polyfun]
+lemma polytime_fun.unary_length : polytime_fun (@list.length α) :=
 begin
-  sorry,
+  convert_to polytime_fun (λ l : list α, equiv.list_unit_equiv (l.map (λ _, ()))),
+  { ext l, simp [equiv.list_unit_equiv], }, polyfun,
 end
+
+@[polyfun]
+lemma polytime_fun.unary_repeat : polytime_fun₂ (@list.repeat α) :=
+begin
+  convert_to polytime_fun₂ (λ (x : α) (n : ℕ), (equiv.list_unit_equiv.symm n).map (λ _, x)),
+  { ext : 2, simp [equiv.list_unit_equiv], }, polyfun,
+end
+
+@[polyfun]
+lemma polytime_fun.unary_nat_add : polytime_fun₂ ((+) : ℕ → ℕ → ℕ) :=
+begin
+  convert_to polytime_fun₂ (λ n m, (list.repeat () n ++ list.repeat () m).length),
+  { ext, simp, }, polyfun,
+end
+
+@[simp] lemma encode_unit_sizeof : (encode ()).sizeof = 1 :=
+by { simp [encode], }
+
+@[simp] lemma encode_unary_nat_sizeof (n : ℕ) : (encode n).sizeof = 2 * n + 1 :=
+by { simp [unary_nat_encode_eq, encode_list_sizeof], ring, }
+
+@[polyfun]
+lemma polytime_fun.unary_iterate {f : α → β → β} {n : α → ℕ} (hf : polytime_fun₂ f) (hn : polytime_fun n)
+  (H : polysize_fun₃ (λ s (i : ℕ), (f s)^[i])) : polytime_fun₂ (λ s, (f s)^[n s]) :=
+begin
+  convert_to polytime_fun₂ (λ (s : α) (x : β), (list.repeat () (n s)).foldr (λ _, f s) x),
+  { simp [list.foldr_const], },
+  polyfun, change polysize_fun₃ (λ s x l, _), simp [list.foldr_const],
+  refine H.comp (_ : polysize_fun (λ (sxl : (α × β) × β × list unit), (sxl.1.1, sxl.2.2.length, sxl.2.1))),
+  apply polysize_of_polytime_fun, polyfun,
+end
+
+lemma _root_.nat.le_mul_right (a : ℕ) {b : ℕ} (hb : b ≠ 0) : a ≤ a * b :=
+by { cases b, { contradiction, }, simp [nat.mul_succ], }
+
+
+lemma polysize_fun.iterate_of_bounded_growth' {f : α → β → β} (hf : ∃ C : polynomial ℕ, ∀ a b, (encode $ f a b).sizeof ≤ (encode b).sizeof + C.eval (encode a).sizeof) :
+  polysize_fun₃ (λ s (i : ℕ), (f s)^[i]) :=
+begin
+  rcases hf with ⟨c, hc⟩,
+  have : ∀ a b (i : ℕ), (encode ((f a)^[i] b)).sizeof ≤ (encode b).sizeof + (c.eval (encode a).sizeof) * i,
+  { intros a b i, induction i with i ih, { simp, }, simp [function.iterate_succ', nat.mul_succ], refine (hc _ _).trans _, rw ← add_assoc, simpa, },
+  use polynomial.monomial 1 1 + c * (polynomial.monomial 1 1), rintro ⟨s, i, l⟩, simp, refine (this _ _ _).trans _,
+  mono*; linarith only,
+end
+
+lemma polysize_fun.iterate_of_bounded_growth {f : α → β → β} (hf : ∃ C, ∀ a b, (encode $ f a b).sizeof ≤ (encode b).sizeof + C) :
+  polysize_fun₃ (λ s (i : ℕ), (f s)^[i]) :=
+by { rcases hf with ⟨c, hc⟩, apply polysize_fun.iterate_of_bounded_growth', use c, simpa, }
+
+lemma _root_.list.range_sum (n : ℕ) : 2 * (list.range n).sum =  n * (n - 1) :=
+begin
+  induction n with n ih, { simp, },
+  simp [list.range_succ, mul_add, ih],
+  cases n; simp [nat.succ_eq_add_one], ring,
+end
+
+lemma polysize_unary_range : polysize_fun list.range :=
+begin
+  use (polynomial.monomial 2 1), intro x,
+  simp [encode_list_sizeof],
+  rw list.sum_map_mul_left, simp [list.range_sum], cases x, { simp, },
+  simp [nat.succ_eq_add_one], nlinarith,
+end
+
+@[polyfun]
+lemma polytime_fun.unary_range : polytime_fun list.range :=
+begin
+  have : ∀ (l : list unit) (xs : list ℕ), l.foldr (λ _ (acc : list ℕ), 0 :: acc.map (+1)) xs =
+    (list.range l.length) ++ (xs.map (+l.length)),
+  { intros l xs, induction l with hd tl ih, { simp, }, simp [list.range_succ_eq_map, ih], },
+  convert_to polytime_fun (λ n, (list.repeat () n).foldr (λ _ (acc : list ℕ), 0 :: acc.map (+1)) []),
+  { ext n : 1, simp [this], }, 
+  polyfun, change polysize_fun₃ (λ s l xs, _), simp only [this],
+  apply polysize_fun.comp₂ (polysize_fun.append _), swap, { apply polysize_of_polytime_fun, polyfun, },
+  apply polysize_fun.comp polysize_unary_range, apply polysize_of_polytime_fun, polyfun,
+end
+
+@[simp] lemma _root_.list.drop_succ {α : Type*} (l : list α) (n : ℕ) :
+  l.drop (n+1) = l.tail.drop n :=
+by { induction l; simp, }
+
+@[polyfun]
+lemma polytime_fun.drop : polytime_fun₂ (@list.drop α) :=
+begin
+  convert_to polytime_fun₂ (λ n l, list.tail^[n] l),
+  { ext n l : 2, induction n generalizing l; simp [*], },
+  polyfun, apply polysize_fun.iterate_of_bounded_growth, use 0, intros _ b,
+  cases b; simp,
+end
+
+@[polyfun]
+lemma polytime_fun.nth : polytime_fun₂ (@list.nth α) :=
+begin
+  convert_to polytime_fun₂ (λ (l : list α) n, (l.drop n).head'),
+  { ext l n : 2, simp [← list.nth_zero, list.nth_drop], },
+  polyfun,
+end
+
+@[polyfun]
+lemma polytime_fun.inth [inhabited α] : polytime_fun₂ (@list.inth α _) :=
+by { change polytime_fun₂ (λ (l : list α) n, (l.nth n).iget), polyfun, }
+
+@[polyfun]
+lemma polytime_fun.unary_nat_tsub : polytime_fun₂ (has_sub.sub : ℕ → ℕ → ℕ) :=
+begin
+  convert_to polytime_fun₂ (λ m n, ((list.repeat () m).drop n).length),
+  { ext m n, simp, }, polyfun,
+end
+
+@[polyfun]
+lemma polytime_fun.unary_nat_le {f g : α → ℕ} (hf : polytime_fun f) (hg : polytime_fun g) :
+  polytime_fun (λ n, (f n ≤ g n : bool)) :=
+begin
+  convert_to polytime_fun (λ n, ((f n - g n) = 0 : bool)),
+  { ext n, simp, }, polyfun,
+end
+
+@[polyfun]
+lemma polytime_fun.unary_nat_min : polytime_fun₂ (@min ℕ _) :=
+by { change polytime_fun₂ (λ n m, if n ≤ m then n else m), polyfun, }
+
 
 end list

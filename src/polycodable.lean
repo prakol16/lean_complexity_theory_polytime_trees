@@ -130,7 +130,6 @@ end option
 
 section mk
 
-@[simps]
 def polycodable.mk' {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
   (polytime_decode : polytime_fun (encode ∘ decode)) : polycodable δ :=
 { encode := λ x, polycodable.encode (encode x),
@@ -156,7 +155,34 @@ lemma polycodable.mk_decode {δ : Type*} (encode : δ → α) (decode : α → �
   @polytime_fun β δ _ (polycodable.mk' encode decode encode_decode polytime_decode) f :=
 hf
 
+def polycodable.of_equiv {δ : Type*} (eqv : δ ≃ α) : polycodable δ :=
+polycodable.mk'
+(λ x, eqv x)
+(λ y, eqv.symm y)
+(by simp)
+(by simpa using polytime_fun.id)
+
+@[polyfun]
+lemma polycodable.of_equiv_polytime {δ : Type*} (eqv : δ ≃ α) :
+  @polytime_fun δ α (polycodable.of_equiv eqv) _ eqv :=
+by { apply polytime_fun.id, }
+
+@[polyfun]
+lemma polycodable.of_equiv_polytime_symm {δ : Type*} (eqv : δ ≃ α) :
+  @polytime_fun α δ _ (polycodable.of_equiv eqv) eqv.symm :=
+by { apply polycodable.mk_decode', }
+
 end mk
+
+section unit
+
+instance : polycodable unit := 
+{ encode := λ _, ptree.nil,
+  decode := λ _, (),
+  decode_encode := by simp,
+  polytime_decode := polytime_fun.const ptree.nil }
+
+end unit
 
 section sum
 

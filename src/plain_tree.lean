@@ -114,6 +114,11 @@ instance : encodable ptree :=
   encodek := λ x, by simp }
 
 
+-- def struct_rec {α β} (pre : ptree → α → α) (post : ptree → α → list β → β) :
+--   ptree → α → β
+-- | nil x := post nil x []
+-- | A@(node a b) x := post A x (b.equiv_list.map (λ v, struct_rec v (pre A x))) 
+
 end ptree
 
 
