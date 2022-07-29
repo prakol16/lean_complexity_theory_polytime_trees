@@ -2,7 +2,6 @@ import polyfix
 import polysize
 import data.list.basic
 
-
 section foldl_lemmas
 
 variables {α β γ : Type*} [inhabited γ]
@@ -232,11 +231,10 @@ begin
   { exact hacc, },
   simp only [← list.foldr_reverse],
   suffices : polysize_fun (λ xls : β × α × list γ, (xls.1, xls.2.1, xls.2.2.reverse)),
-  { exact polysize_fun.comp hs this, }, apply polysize_of_polytime_fun,
-  apply polytime_fun.pair polytime_fun.fst, apply polytime_fun.pair; apply polytime_fun.comp,
-  exacts [polytime_fun.fst, polytime_fun.snd, (polytime_fun.reverse_aux H_enc), polytime_fun.comp polytime_fun.snd polytime_fun.snd],
+  { exact polysize_fun.comp hs this, },
+  apply polysize_of_polytime_fun,
+  have := polytime_fun.reverse_aux H_enc, polyfun,
 end
-
 
 lemma polysize_fun.append : by haveI := lea H_enc; exact
   polysize_fun₂ (@list.append γ) :=
@@ -380,6 +378,34 @@ end
 lemma foldr_eta' (l₁ l₂ : list α) : l₁.foldr list.cons l₂ = l₁ ++ l₂ :=
 by { induction l₁ with hd tl ih, { simp, }, simpa, }
 
+lemma len_le_encode_sizeof' (l : list α) :
+  l.length ≤ (encode l).sizeof :=
+by { refine (nat.le_succ _).trans _, apply len_le_encode_sizeof, }
+
+theorem polysize_foldl (f : β → α → γ → α) (hf : ∃ p : polynomial ℕ, ∀ s acc hd, (encode (f s acc hd)).sizeof ≤ (encode acc).sizeof + p.eval (encode (s, hd)).sizeof) :
+  polysize_fun₃ (λ (s : β) (x : α) (l : list γ), l.foldl (f s) x) :=
+begin
+  rcases hf with ⟨p, hp⟩,
+  have : ∀ (s : β) (x : α) (l : list γ), (encode (l.foldl (f s) x)).sizeof ≤ (encode x).sizeof + (p.eval (encode (s, l)).sizeof) * l.length,
+  { intros s x l, induction l with hd tl ih generalizing x, { simp, },
+    simp, refine (ih _).trans _, rw [add_comm tl.length 1, mul_add, ← add_assoc], 
+    mono*, { refine (hp _ _ _).trans _, simp, apply monotone_polynomial_nat, linarith only, },
+    all_goals { simp, }, }, 
+  use polynomial.monomial 1 1 + p * (polynomial.monomial 1 1),
+  rintros ⟨s, x, l⟩, simp, refine (this _ _ _).trans _, mono*,
+  { linarith only, }, { simp, linarith only, },
+  refine (len_le_encode_sizeof' _).trans _, all_goals { linarith only, },
+end
+
+theorem polysize_foldr {f : β → γ → α → α} (hf : ∃ p : polynomial ℕ, ∀ s hd acc, (encode (f s hd acc)).sizeof ≤ (encode acc).sizeof + p.eval (encode (s, hd)).sizeof) :
+  polysize_fun₃ (λ (s : β) (x : α) (l : list γ), l.foldr (f s) x) :=
+begin
+  simp_rw ← list.foldl_reverse, dunfold polysize_fun₃,
+  refine polysize_fun.comp (_ : polysize_fun (λ sxl : β × α × list γ, sxl.2.2.foldl (λ y x, f sxl.1 x y) sxl.2.1)) (_ : polysize_fun (λ sxl : β × α × list γ, (sxl.1, sxl.2.1, sxl.2.2.reverse))),
+  { skip, apply polysize_foldl (λ s acc hd, f s hd acc), dsimp, rcases hf with ⟨p, hp⟩, use p, intros, apply hp, },
+  { apply polysize_of_polytime_fun, polyfun, },
+end
+
 @[polyfun]
 theorem polytime_fun.append : polytime_fun₂ (@list.append γ) :=
 begin
@@ -411,9 +437,6 @@ begin
   polyfun,
 end
 
-lemma encode_list_filter_sizeof_le (l : list γ) (P : γ → Prop) [decidable_pred P] :
-  (encode (l.filter P)).sizeof ≤ (encode l).sizeof := encode_sizeof_le_of_sublist _ (list.filter_sublist _)
-
 lemma polytime_fun.filter {f : β → α → bool} {l : β → list α} (hf : polytime_fun₂ f)
   (hl : polytime_fun l) : polytime_fun (λ s, (l s).filter (λ x, f s x)) :=
 begin
@@ -421,10 +444,9 @@ begin
   { intros xs l P, induction l with hd tl ih, { simp, }, cases H : P hd; simpa [H], },
   convert_to polytime_fun (λ s : β, (l s).foldr (λ hd acc, if f s hd then hd :: acc else acc) []),
   { ext s : 1, simp [filter_eq], }, polyfun,
-  change polysize_fun₃ (λ s xs l, _), simp_rw filter_eq,
-  apply polysize_fun.comp₂, { apply polysize_of_polytime_fun, polyfun, },
-  { use polynomial.monomial 1 1, rintro ⟨a, b, c⟩, simp, refine (encode_list_filter_sizeof_le _ _).trans _, linarith only, },
-  { apply polysize_of_polytime_fun, polyfun, },
+  apply polysize_foldr, 
+  use polynomial.monomial 1 1, 
+  intros s hd acc, split_ifs; simp, linarith only,
 end
 
 @[simp]
@@ -568,6 +590,5 @@ end
 @[polyfun]
 lemma polytime_fun.unary_nat_min : polytime_fun₂ (@min ℕ _) :=
 by { change polytime_fun₂ (λ n m, if n ≤ m then n else m), polyfun, }
-
 
 end list

@@ -180,7 +180,7 @@ holds of any point where `eval f a` evaluates to `b`. This formalizes the notion
   {f : σ →. option σ} {b : σ} {C : σ → Sort*} {a : σ} (h : b ∈ eval f a)
   (H : ∀ a, b ∈ eval f a →
     (∀ a', f a = part.some (some a') → C a') → C a) : C a :=
-pfun.fix_induction h (λ _ b ih, H _ b (λ _ ha, ih _ (by simp [ha])))
+by { dsimp only [eval] at *, exact pfun.fix_induction h (λ _ b ih, H _ b (λ _ ha, ih _ (by simp [ha]))) }
 
 theorem mem_eval {σ} {f : σ →. option σ} {a b} :
   b ∈ eval f a ↔ reaches f a b ∧ f b = part.some none :=
