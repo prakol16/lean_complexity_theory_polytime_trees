@@ -205,3 +205,10 @@ end track
 
 end execution
 
+namespace streams
+
+structure exec_stram (α : Type*) :=
+(seq : ℕ → option α)
+(sound : ∀ n m, n ≤ m → seq n = none → seq m = none)
+
+end streams

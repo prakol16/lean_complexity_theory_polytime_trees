@@ -591,4 +591,80 @@ end
 lemma polytime_fun.unary_nat_min : polytime_fun₂ (@min ℕ _) :=
 by { change polytime_fun₂ (λ n m, if n ≤ m then n else m), polyfun, }
 
+lemma _root_.list.nth_eq_some_nth_le {α} (l : list α) (n : ℕ) (hn : n < l.length) : l.nth n = some (l.nth_le n hn) :=
+by { rw list.nth_eq_some, exact ⟨_, rfl⟩, }
+
+@[polyfun]
+lemma polytime_fun.zip : polytime_fun₂ (@list.zip α β) :=
+begin
+  inhabit α, inhabit β,
+  convert_to polytime_fun₂ (λ (l₁ : list α) (l₂ : list β), (list.range $ min l₁.length l₂.length).map (λ i, (l₁.inth i, l₂.inth i))),
+  { ext l₁ l₂ : 2, apply list.ext_le, { simp, }, intros n h₁ h₂, simp [list.inth], rw [list.nth_eq_some_nth_le, list.nth_eq_some_nth_le], exact ⟨rfl, rfl⟩, },
+  polyfun,
+end
+
+@[simp] lemma _root_.list.map_with_index_nil {α β} (f : ℕ → α → β) :
+  (@list.nil α).map_with_index f = [] := rfl
+
+@[simp] lemma _root_.list.map_with_index_snoc {α β} (f : ℕ → α → β) (init : list α) (last : α) :
+  (init ++ [last]).map_with_index f = (init.map_with_index f) ++ [f init.length last] :=
+begin
+  suffices : ∀ n, (init ++ [last]).map_with_index_core f n = (init.map_with_index_core f n) ++ [f (init.length + n) last],
+  { exact this 0, },
+  induction init with hd tl ih,
+  { intro, simp [list.map_with_index_core], },
+  { intro n, simp [list.map_with_index_core, ih (n + 1)], congr' 3, ring, },
+end
+
+theorem _root_.list.map_with_index_eq_zip_map {α β} (l : list α) (f : ℕ → α → β) :
+  l.map_with_index f = (list.zip (list.range l.length) l).map (λ x, f x.1 x.2) :=
+begin
+  induction l using list.reverse_rec_on with int lst ih,
+  { simp, },
+  { simp [list.map_with_index_snoc, ih, list.range_succ],
+    rw list.zip_append; simp, }
+end
+
+@[polyfun]
+lemma polytime_fun.imap {f : α → list β} {g : α → ℕ → β → γ}
+  (hf : polytime_fun f) (hg : polytime_fun₃ g) :
+  polytime_fun (λ s, (f s).map_with_index (g s)) :=
+begin
+  convert_to polytime_fun (λ s, ((list.range $ (f s).length).zip (f s)).map (λ x, g s x.1 x.2)),
+  { ext s : 1, apply list.map_with_index_eq_zip_map, },
+  polyfun,
+end
+
+@[simp]
+def _root_.list.attach_tails {α} : list α → list (list α)
+| [] := []
+| (hd :: tl) := (hd :: tl) :: (_root_.list.attach_tails tl)
+
+@[polyfun]
+lemma polytime_fun.attach_tails : polytime_fun (@list.attach_tails α) :=
+begin
+  convert_to polytime_fun (λ l : list α, l.map_with_index (λ i x, l.drop i)),
+  { ext l : 1, rw list.map_with_index_eq_zip_map, induction l with hd tl ih,
+    { simp, }, simpa [list.range_succ_eq_map,  list.zip_map_left] using ih, },
+  polyfun,
+end
+
+@[simp]
+def _root_.list.rec' {α β} (f : list β → α → α) (s : α) : list β → α
+| [] := s
+| (hd :: tl) := f (hd :: tl) (_root_.list.rec' tl)
+
+@[polyfun]
+lemma polytime_fun.list_rec {f : γ → list β → α → α} {s₀ : γ → α} {l : γ → list β}
+  (hf : polytime_fun₃ f) (hs₀ : polytime_fun s₀) (hl : polytime_fun l) 
+  (hb : ∃ C : polynomial ℕ, ∀ (s : γ) (l : list β) (x : α), (encode $ f s l x).sizeof ≤ (encode x).sizeof + C.eval (encode (s, l)).sizeof) :
+  polytime_fun (λ s, (l s).rec' (f s) (s₀ s)) :=
+begin
+  convert_to polytime_fun (λ s, (l s).attach_tails.foldr (f s) (s₀ s)),
+  { ext s, induction l s, { simp, }, { simp [ih], }, },
+  polyfun,
+  apply polysize_foldr, exact hb,
+end
+
+
 end list

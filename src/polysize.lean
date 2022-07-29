@@ -64,3 +64,8 @@ begin
   simpa using finset.univ_nonempty,
 end
 
+def polysize_fun_safe (f : α → β → γ) : Prop :=
+∃ p : polynomial ℕ, ∀ (x : α) (y : β), (encode (f x y)).sizeof ≤ p.eval (encode x).sizeof
+
+
+
