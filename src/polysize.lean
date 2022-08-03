@@ -92,3 +92,11 @@ begin
   simp [← add_assoc], mono*,
 end
 
+instance : polycodable (list α) := sorry
+
+example {σ : Type*} [polycodable σ] [inhabited α] {f : σ × α → β → β} (hf : polysize_fun_safe f) :
+  polysize_fun_safe (λ (s : σ) (acc : β × list α), f (s, acc.2.head) acc.1) :=
+begin
+  
+end
+

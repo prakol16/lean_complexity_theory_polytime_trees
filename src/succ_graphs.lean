@@ -283,12 +283,14 @@ end)
   (by simp [execution.time_with])
 
 theorem execution.time_le (J : ℕ) (time : σ →. ℕ) (hd : ∀ ⦃x y⦄, x ∈ f.states → some y ∈ f.next x → (time x).dom)
-  (hJ : ∀ ⦃x t⦄, x ∈ f.states → t ∈ time x → t ≤ J) {t₁ t₂} (ht₁ : t₁ ∈ f.time time) (ht₂ : t₂ ∈ f.time (pfun.pure 1)) :
-  t₁ ≤ J * t₂ :=
+  (hJ : ∀ ⦃x t⦄, x ∈ f.states → t ∈ time x → t ≤ J) {N} (hN : N ∈ f.time (pfun.pure 1)) :
+  ∃ t, t ∈ f.time time ∧ t ≤ J * N :=
 begin
   let R := f.time_with_bound J time hd hJ,
-  simp [execution.time] at ht₁ ht₂, cases ht₁ with x₁ ht₁, cases ht₂ with x₂ ht₂,
-  have := R.rel_of_mem_eval ht₁ ht₂, simp at this, tauto,
+  simp [execution.time] at hN ⊢, cases hN with x₂ ht₂,
+  have := R.symm.mem_eval_of ht₂, simp at this,
+  rcases this with ⟨t, x, ht, _, H⟩,
+  exact ⟨t, ⟨x, ht⟩, H⟩,
 end
 
 end time_with

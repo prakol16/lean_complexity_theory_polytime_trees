@@ -1,26 +1,42 @@
 import polycodable
 import npolynomial
+import promise
 
 variables {α β : Type*}
 
-open part_eval (eval time_iter)
 open polycodable (encode decode)
 
-lemma pfun.res_mono (f : α →. β) {S S' : set α} {x y} (h : y ∈ f.res_inter S x) (hS : S ⊆ S') : y ∈ f.res_inter S' x :=
-by { simp at h ⊢, tauto, }
-
-theorem time_bound_fix {c : code} (b₁ b₂ b₃ : ℕ → ℕ) (mb : monotone b₁) 
-  (h₁ : time_bound c b₁) (h₂ : ∀ x : ptree, ∃ t ≤ b₃ x.sizeof, t ∈ (time_iter ((c.eval.map ptree.to_option).res_inter {s | s.sizeof ≤ b₂ x.sizeof}) (pfun.pure 1) x)) :
-  time_bound c.fix (λ t, (b₃ t) * (b₁ (b₂ t)) + t) :=
+theorem fix_time_le {c : code} {x₀ : ptree} {N : ℕ} (b₁ b₂ : ℕ → ℕ) (mb : monotone b₁) 
+  (h₁ : time_bound c b₁) (h₂ : ∀ {x : ptree}, x ∈ (c.fix_iterator x₀).states → x.sizeof ≤ b₂ x₀.sizeof) 
+  (hN : N ∈ (c.fix_iterator x₀).time (pfun.pure 1)) :
+  ∃ t ∈ c.fix.time x₀, t ≤ (b₁ (b₂ x₀.sizeof)) * N + x₀.sizeof :=
 begin
-  simp [time_bound, code.time], intro v, specialize h₂ v,
-  rcases h₂ with ⟨t, ht, H⟩,
-  obtain ⟨a, ha, a_le⟩ := @part_eval.with_time_le_of_iters_le _ (c.eval.map ptree.to_option) c.time _ _ (b₁ (b₂ v.sizeof)) _ (part_eval.time_iter_mono _ H),
-  { use [a, ha], exact a_le.trans (mul_le_mul_right' ht _), },
-  { intro, simp [time_dom_iff_eval_dom, pfun.map], },
-  intros x y hxy, apply pfun.res_mono _ hxy, intros s hs k hk,
-  refine (time_bound_spec h₁ hk).trans _, apply mb, exact hs,
+  simp [code.time],
+  refine execution.time_le (c.fix_iterator x₀) (b₁ (b₂ x₀.sizeof)) c.time _ _ hN,
+  { intros, rw time_dom_iff_eval_dom, change x ∈ c.eval.dom, rw eval_dom_of_time_bound h₁, triv, },
+  intros x t hx ht,
+  rcases h₁ x with ⟨t, tmp, ht'⟩, cases part.mem_unique ht tmp,
+  exact ht'.trans (mb (h₂ hx)),
 end
+
+theorem polytime_fix_on_pred {c : code} (pc : polytime c) (pred : set ptree)
+  (hs : ∃ p : polynomial ℕ, ∀ {x₀ x : ptree}, x₀ ∈ pred → x ∈ (c.fix_iterator x₀).states → x.sizeof ≤ p.eval x₀.sizeof)
+  (hn : ∃ q : polynomial ℕ, ∀ {x₀ : ptree}, x₀ ∈ pred → ∃ N ∈ (c.fix_iterator x₀).time (pfun.pure 1), N ≤ q.eval x₀.sizeof) :
+  polytime_promise c.fix pred  :=
+begin
+  cases pc with f pc, cases hs with p hs, cases hn with q hn, use (f.comp p) * q + polynomial.monomial 1 1, simp,
+  intros v hv, rcases hn hv with ⟨N, hN, N_le⟩,
+  obtain ⟨t, ht, t_le⟩ := fix_time_le (λ n, f.eval n) (λ n, p.eval n) (monotone_polynomial_nat _) pc (λ _, hs hv) hN,
+  refine ⟨t, ht, t_le.trans _⟩, mono*; exact zero_le',
+end
+
+-- theorem polytime_fix {c init : code} (pc : polytime c) (pinit : polytime init)
+--   (hs : ∃ p : polynomial ℕ, ∀ {x : ptree}, )
+
+-- safe: flip f : ((s, hd) : σ × α) → (acc : β) → β
+-- safe (λ s ⟨acc, l⟩, (flip f) (s, l.head) acc)
+
+#exit
 
 theorem polytime_fix {c : code} (pc : polytime c) (p q : polynomial ℕ) (he : ∀ x : ptree, ∃ t ≤ p.eval x.sizeof, t ∈ time_iter ((c.eval.map ptree.to_option).res_inter {s | s.sizeof ≤ q.eval x.sizeof}) (pfun.pure 1) x) :
   polytime c.fix :=
