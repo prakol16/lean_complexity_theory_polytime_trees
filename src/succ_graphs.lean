@@ -18,7 +18,6 @@ def states (f : execution σ) : set σ :=
 lemma start_mem_states (f : execution σ) : f.start ∈ f.states :=
 relation.refl_trans_gen.refl
 
-
 lemma mem_states_of_fwd {f : execution σ} {x y} (hx : x ∈ f.states) (hxy : some y ∈ f.next x) :
   y ∈ f.states :=
 relation.refl_trans_gen.tail hx hxy
@@ -35,6 +34,15 @@ end
 theorem step_induction {P : σ → Prop} {f : execution σ} {x : σ} (hx : x ∈ f.states) (base : P f.start)
   (step : ∀ ⦃x y⦄, x ∈ f.states → P x → some y ∈ f.next x → P y) : P x :=
 by { induction hx with _ _ H h ih, { assumption, }, { refine step H ih h, } }
+
+lemma mem_ran_of_mem_states {f : execution σ} {y : σ} (hy : y ∈ f.states) :
+  y = f.start ∨ some y ∈ f.next.ran :=
+begin
+  apply step_induction hy, { exact or.inl rfl, },
+  intros x y hx _,
+  simp [pfun.ran], tauto, 
+end
+
 
 variables (f : execution σ)
 
@@ -174,35 +182,49 @@ end stepwise_tr
 section track_with
 variables (f : execution σ) (state : τ → σ →. τ) (s : τ)
 def execution.track_with : execution (τ × σ) :=
-{ next := λ x, (state x.1 x.2).bind $ λ s', (f.next x.2).map $ λ x', x'.map (prod.mk s'),
+{ next := λ x, (f.next x.2).bind (λ x', x'.elim (part.some none) (λ x'', (state x.1 x.2).map (λ s', some (s', x'')))),
+-- { next := λ x, (state x.1 x.2).bind $ λ s', (f.next x.2).map $ λ x', x'.map (prod.mk s'),
   start := (s, f.start) }
 
+lemma _root_.option.elim_comp {α β} (P : β → Sort*) (x : option α) (y : β) (f : α → β)  :
+  P (x.elim y f) = (x.elim (P y) (P ∘ f)) :=
+by cases x; simp
+
+@[simp] lemma _root_.option.elim_true {α} (x : option α) (f : α → Prop) :
+  x.elim true f ↔ ∀ y, x = some y → f y :=
+by cases x; simp
+
+@[simp] lemma _root_.option.eq_none_iff_forall_not_some {α} (x : option α) :
+  (∀ y, x ≠ some y) ↔ (x = none) :=
+by simp_rw [ne.def, ← not_exists, ← option.is_some_iff_exists, option.not_is_some_iff_eq_none]
+
+@[simp] lemma _root_.option.elim_false {α} (x : option α) (f : α → Prop) :
+  x.elim false f ↔ (∃ y, x = some y ∧ f y) :=
+by cases x; simp
+
 @[simp] lemma execution.track_with_dom_iff {x : τ × σ} :
-  ((f.track_with state s).next x).dom ↔ (state x.1 x.2).dom ∧ (f.next x.2).dom :=
-by simp [execution.track_with]
+  ((f.track_with state s).next x).dom ↔ (f.next x.2).dom ∧ (∀ y, some y ∈ f.next x.2 → (state x.1 x.2).dom) :=
+by simp [execution.track_with, option.elim_comp part.dom, function.comp, part.get_eq_iff_mem]
 
 @[simp] lemma execution.track_with_some_def {x y : τ × σ} :
   some y ∈ (f.track_with state s).next x ↔ y.1 ∈ state x.1 x.2 ∧ some y.2 ∈ f.next x.2 :=
 begin
   cases x with x₁ x₂, cases y with y₁ y₂,
-  simp [execution.track_with], tidy,
+  simp [execution.track_with, option.elim_comp (has_mem.mem (some (y₁, y₂)))], tidy,
 end
 
-@[simp] lemma execution.track_with_none_def {x : τ × σ} (hd : (f.next x.2).dom → (state x.1 x.2).dom) :
+@[simp] lemma execution.track_with_none_def {x : τ × σ} :
   none ∈ (f.track_with state s).next x ↔ none ∈ f.next x.2 :=
-begin
-  simp only [part.dom_iff_mem, forall_exists_index] at hd,
-  simpa [execution.track_with] using hd none,
-end
+by simp [execution.track_with, option.elim_comp (has_mem.mem none), imp_false]
 
 @[simp] lemma execution.track_with_start :
   (f.track_with state s).start = (s, f.start) := rfl
 
 @[simps]
-def tr_of_track_with (hd : ∀ {x} y, x ∈ f.states → (f.next x).dom → (state y x).dom) :
+def tr_of_track_with (hd : ∀ {x x'} (y), x ∈ f.states → some x' ∈ f.next x → (state y x).dom) :
   f ∼ₛ f.track_with state s :=
 { rel := λ a b, a = b.snd,
-  dom_iff := λ x y hx hy, by { rintro rfl, simpa using hd _ hx, },
+  dom_iff := λ x y hx hy, by { rintro rfl, simp, tauto, },
   some_iff := λ x y x' y' _ _,
 begin
   rintro rfl,
@@ -213,20 +235,27 @@ end,
 begin
   cases y with y₁ y₂,
   rintro rfl,
-  rw execution.track_with_none_def,
-  exact hd y₁ hx,
+  simp,
 end,
   start := rfl }
+
+@[simp] lemma track_with_eval_dom (hd : ∀ ⦃x x'⦄ (y), x ∈ f.states → some x' ∈ f.next x → (state y x).dom) :
+  (f.track_with state s).eval.dom ↔ f.eval.dom :=
+(tr_of_track_with f state s hd).eval_dom_iff.symm 
 
 section time_with
 
 def execution.time_with (time : σ →. ℕ) : execution (ℕ × σ) :=
 f.track_with (λ n s, (time s).map (+n)) 0
 
+@[simp] lemma execution.none_mem_time_with (time : σ →. ℕ) {x : ℕ × σ} :
+  none ∈ (f.time_with time).next x ↔ none ∈ f.next x.2 :=
+by simp [execution.time_with] 
+
 @[simps]
-def execution.time_with_tr (time : σ →. ℕ) (hd : ∀ x ∈ f.states, (f.next x).dom → (time x).dom) :
+def execution.time_with_tr (time : σ →. ℕ) (hd : ∀ {x x'}, x ∈ f.states → some x' ∈ f.next x → (time x).dom) :
   f ∼ₛ f.time_with time :=
-tr_of_track_with f _ _ (λ x y hx, by simpa using hd x hx)
+tr_of_track_with f _ _ (λ x y hx, by simpa using hd)
 
 def execution.time (time : σ →. ℕ) : part ℕ :=
 (f.time_with time).eval.map prod.fst
@@ -239,7 +268,7 @@ def execution.time (time : σ →. ℕ) : part ℕ :=
   (pfun.pure x y) = part.some x := rfl
 
 @[simps]
-def execution.time_with_bound (J : ℕ) (time : σ →. ℕ) (hd : ∀ x ∈ f.states, (f.next x).dom → (time x).dom)
+def execution.time_with_bound (J : ℕ) (time : σ →. ℕ) (hd : ∀ ⦃x x'⦄, x ∈ f.states → some x' ∈ f.next x → (time x).dom)
   (hJ : ∀ ⦃x t⦄, x ∈ f.states → t ∈ time x → t ≤ J) :
   f.time_with time ∼ₛ f.time_with (pfun.pure 1) :=
 ((f.time_with_tr time hd).symm.trans (f.time_with_tr _ (by simp))).extend (λ s₁ s₂, s₁.1 ≤ J * s₂.1) 
@@ -253,7 +282,7 @@ begin
 end)
   (by simp [execution.time_with])
 
-theorem execution.time_le (J : ℕ) (time : σ →. ℕ) (hd : ∀ x ∈ f.states, (f.next x).dom → (time x).dom)
+theorem execution.time_le (J : ℕ) (time : σ →. ℕ) (hd : ∀ ⦃x y⦄, x ∈ f.states → some y ∈ f.next x → (time x).dom)
   (hJ : ∀ ⦃x t⦄, x ∈ f.states → t ∈ time x → t ≤ J) {t₁ t₂} (ht₁ : t₁ ∈ f.time time) (ht₂ : t₂ ∈ f.time (pfun.pure 1)) :
   t₁ ≤ J * t₂ :=
 begin

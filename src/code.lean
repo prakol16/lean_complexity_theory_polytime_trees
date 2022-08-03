@@ -1,8 +1,6 @@
 import data.pfun
 import plain_tree
-import reaches
-
-open part_eval
+import succ_graphs
 
 inductive code
 | left : code
@@ -22,7 +20,23 @@ inductive code
 | (code.node l r) := λ t, do x ← l.eval t, y ← r.eval t, part.some (ptree.node x y)
 | (code.comp f g) := λ t, g.eval t >>= f.eval
 | (code.case f g) := λ t, if t.left = ptree.nil then f.eval t.right else g.eval t.right
-| (code.fix f) := eval (λ x, if x.left = ptree.nil then part.some none else (f.eval x).map some)
+| (code.fix f) := λ x₀, execution.eval ⟨λ x, if x.left = ptree.nil then part.some none else (f.eval x).map some, x₀⟩
+
+def code.fix_iterator (f : code) (x₀ : ptree) : execution ptree :=
+⟨λ x, if x.left = ptree.nil then part.some none else (f.eval x).map some, x₀⟩
+
+lemma code.eval_fix (f : code) (x : ptree) : f.fix.eval x = (f.fix_iterator x).eval := rfl
+@[simp] lemma code.none_mem_eval_fix {f : code} {x x₀ : ptree} :
+  none ∈ (f.fix_iterator x₀).next x ↔ x.left = ptree.nil :=
+by { simp only [code.fix_iterator], split_ifs; simpa, }
+
+@[simp] lemma code.some_mem_eval_fix {f : code} {x x₀ x' : ptree} :
+  some x' ∈ (f.fix_iterator x₀).next x ↔ x.left ≠ ptree.nil ∧ x' ∈ f.eval x :=
+by { simp only [code.fix_iterator], split_ifs; simp; tauto, }
+
+@[simp] lemma code.fix_iterator_start (f : code) (x₀ : ptree) :
+  (f.fix_iterator x₀).start = x₀ := rfl
+
 
 local infixr `∘`:90 := code.comp
 

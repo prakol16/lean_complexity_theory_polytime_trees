@@ -65,7 +65,30 @@ begin
 end
 
 def polysize_fun_safe (f : α → β → γ) : Prop :=
-∃ p : polynomial ℕ, ∀ (x : α) (y : β), (encode (f x y)).sizeof ≤ p.eval (encode x).sizeof
+∃ p : polynomial ℕ, ∀ (x : α) (y : β), (encode (f x y)).sizeof ≤ (encode y).sizeof + p.eval (encode x).sizeof
 
+lemma polysize_fun_safe_iff_polysize {f : α → γ} :
+  polysize_fun_safe (λ x (_ : β), f x) ↔ polysize_fun f :=
+begin
+  split,
+  { inhabit β, 
+    rintro ⟨p, hp⟩,
+    use p + (encode (default : β)).sizeof, intro x,
+    simpa [add_comm] using hp x default, },
+  { rintro ⟨p, hp⟩,
+    refine ⟨p, λ _ _, (hp _).trans _⟩,
+    simp, }
+end
 
+lemma polysize_fun_safe.comp {δ ε : Type*} [polycodable δ] [polycodable ε]
+  {f : α → β → γ} {g : δ → α} {h : δ → ε → β} :
+  polysize_fun_safe f → polysize_fun g → polysize_fun_safe h →
+  polysize_fun_safe (λ x y, f (g x) (h x y))
+| ⟨pf, hf⟩ ⟨pg, hg⟩ ⟨ph, hh⟩ :=
+begin
+  use ph + (pf.comp pg),
+  intros x y,
+  refine (hf _ _).trans _,
+  simp [← add_assoc], mono*,
+end
 

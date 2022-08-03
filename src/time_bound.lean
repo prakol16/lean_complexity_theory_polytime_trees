@@ -1,6 +1,7 @@
 import tactic.linarith
 import ite_lemmas
 import code
+import succ_graphs
 
 def code.time : code → ptree →. ℕ
 | code.left := λ t, part.some t.sizeof
@@ -10,7 +11,7 @@ def code.time : code → ptree →. ℕ
 | (code.node a b) := λ t, (+1) <$> (a.time t) + (b.time t)
 | (code.comp f g) := λ t, (+1) <$> (g.time t) + (g.eval t >>= f.time)
 | (code.case f g) := λ t, (+1) <$> if t.left = ptree.nil then f.time t.right else g.time t.right
-| (code.fix f) := λ t, (+t.sizeof) <$> part_eval.time_iter (f.eval.map ptree.to_option) f.time t
+| (code.fix f) := λ t, (+t.sizeof) <$> (f.fix_iterator t).time f.time
 
 
 lemma add_def (x y : part ℕ) : x + y = x >>= λ x', y >>= (λ y', pure (x' + y')) :=
@@ -19,11 +20,14 @@ by { simp only [(+), (<*>), part.bind_eq_bind, part.bind_map, part.map_eq_map], 
 lemma time_dom_iff_eval_dom (c : code) (v : ptree) : (c.time v).dom ↔ (c.eval v).dom :=
 begin
   induction c generalizing v,
-  all_goals { simp [code.time, add_def], },
+  all_goals { simp [code.time, add_def, code.eval_fix], },
   case code.node : c₁ c₂ c₁ih c₂ih { simp [c₁ih, c₂ih], },
   case code.comp : c₁ c₂ c₁ih c₂ih { simp [c₁ih, c₂ih], tauto, },
   case code.case : c₁ c₂ c₁ih c₂ih { simp [c₁ih, c₂ih, apply_ite part.dom], },
-  case code.fix : f ih { rw part_eval.time_iter_dom_iff, simp [ih, pfun.map], }
+  case code.fix : f ih
+  { simp [execution.time],
+    refine (execution.time_with_tr (f.fix_iterator v) f.time _).eval_dom_iff.symm,
+    intros x x' _, rw ih, simp [part.dom_iff_mem], tauto, }
 end
 
 lemma time_dom_iff_eval_to_option_dom (c : code) (v : ptree) : (c.time v).dom ↔ (c.eval.map ptree.to_option v).dom :=
@@ -76,16 +80,17 @@ begin
     rcases ht with ⟨t', ht', rfl⟩,
     split_ifs at *, { linarith only [c₁ih hv ht'], }, { linarith only [c₂ih hv ht'], } },
   case code.fix : f ih
-  { simp [code.time] at hv ht,
-    rcases ht with ⟨t, ht, rfl⟩,
-    rw part_eval.time_iter_eq_iff_of_eval (time_dom_iff_eval_to_option_dom f) hv at ht,
-    rcases ht with ⟨t', hr, hvout', ht⟩,
-    rcases relation.refl_trans_gen.cases_tail hr with H | ⟨⟨tl, vl⟩, _, H⟩,
-    { simp at H, rw H.2, simp, },
-    have t'_le : t' ≤ t, { simp at ht, rcases ht with ⟨_, _, rfl⟩, simp, },
-    simp [part_eval.with_time, pfun.map] at H,  rcases H with ⟨vout, hvt, n, hn, ⟨_, rfl⟩, rfl⟩, 
-    have := ih hvt hn, 
-    linarith only [ptree.right_sizeof_le vout, this, t'_le], }
+  { simp [code.time, code.eval_fix, execution.time] at hv ht,
+    rcases ht with ⟨t, ⟨x, hx⟩, rfl⟩,
+    obtain rfl : vout = x,
+    { simpa using (execution.time_with_tr (f.fix_iterator vin) f.time _).rel_of_mem_eval hv hx,
+      simp_rw [time_dom_iff_eval_dom, part.dom_iff_mem], simp, tauto, },
+    rw execution.mem_eval at hx, simp at hx,
+    cases execution.mem_ran_of_mem_states hx.1,
+    { simp [execution.time_with] at h, rw h.2, simp, },
+    simp [execution.time_with, pfun.ran] at h,
+    rcases h with ⟨t', vout', ⟨tf, htf, rfl⟩, _, hvout⟩,
+    refine (ih hvout htf).trans _, simp [add_assoc], }
 end
 
 lemma time_bound_left : time_bound code.left id :=
