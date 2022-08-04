@@ -2,6 +2,7 @@ import polyfix
 import polysize
 import data.list.basic
 
+#exit
 section foldl_lemmas
 
 variables {α β γ : Type*} [inhabited γ]

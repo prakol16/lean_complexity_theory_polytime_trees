@@ -113,16 +113,83 @@ instance : encodable ptree :=
   decode := some ∘ ptree.of_nat,
   encodek := λ x, by simp }
 
+class pencodable (α : Type*) :=
+(encode : α → ptree)
+(decode : ptree → α)
+(encodek : ∀ x, decode (encode x) = x)
 
--- def struct_rec {α β} (pre : ptree → α → α) (post : ptree → α → list β → β) :
---   ptree → α → β
--- | nil x := post nil x []
--- | A@(node a b) x := post A x (b.equiv_list.map (λ v, struct_rec v (pre A x))) 
+attribute [simp, higher_order] pencodable.encodek
+namespace pencodable
+
+variables {α β : Type*} [pencodable α] [pencodable β]
+
+instance encode_ptree : pencodable ptree := ⟨id, id, λ _, rfl⟩
+@[simp] lemma encode_ptree_def : (@encode ptree _) = id := rfl
+@[simp] lemma decode_ptree_def : (@decode ptree _) = id := rfl
+
+instance : pencodable (α × β) :=
+{ encode := λ x, node (encode x.1) (encode x.2),
+  decode := λ y, (decode y.left, decode y.right),
+  encodek := λ x, by simp }
+lemma encode_pair_def (x : α) (y : β) : encode (x, y) = node (encode x) (encode y) := rfl
+lemma decode_pair_def (v : ptree) : @decode (α × β) _ v = (decode v.left, decode v.right) := rfl
+
+@[priority 50]
+instance : nonempty α := ⟨decode nil⟩
+
+instance : pencodable bool :=
+{ encode := λ b, cond b ptree.nil ptree.non_nil,
+  decode := λ v, v = ptree.nil,
+  encodek := λ b, by cases b; simp }
+lemma encode_bool_def (b : bool) : encode b = cond b ptree.nil ptree.non_nil := rfl
+lemma decode_bool_def (v : ptree) : (decode v : bool) ↔ v = ptree.nil := by simp [decode]
+lemma decode_bool_def' (v : ptree) : (decode v : bool) = (v = ptree.nil) := rfl
+
+instance : pencodable unit :=
+{ encode := λ _, ptree.nil,
+  decode := λ _, (),
+  encodek := λ x, by simp }
+lemma encode_unit_def : encode () = nil := rfl
+
+protected def mk' {γ : Type*} (enc : γ → α) (dec : α → γ) (h : ∀ x, dec (enc x) = x): pencodable γ :=
+{ encode := λ x, encode (enc x),
+  decode := λ y, dec (decode y),
+  encodek := λ x, by simp [h] }
+
+def of_equiv {γ : Type*} (eqv : γ ≃ α) : pencodable γ :=
+pencodable.mk' eqv eqv.symm (by simp)
+
+instance : pencodable (list α) :=
+{ encode := λ l, equiv_list.symm (l.map encode),
+  decode := λ v, v.equiv_list.map decode,
+  encodek := λ l, by simp }
+lemma encode_list_def (l : list α) : encode l = equiv_list.symm (l.map encode) := rfl
+
+lemma decode_list_def (v : ptree) : (decode v : list α) = v.equiv_list.map decode := rfl
+
+@[simp] lemma encode_ptree_list (l : list ptree) :
+  encode l = equiv_list.symm l :=
+by simp [encode_list_def]
+
+@[simp] lemma decode_ptree_list (l : ptree) :
+  (decode l : list ptree) = l.equiv_list :=
+by simp [decode_list_def]
+
+lemma encode_injective : function.injective (@encode α _) :=
+function.left_inverse.injective encodek
+
+@[simp] lemma encode_inj_iff {x y : α} : encode x = encode y ↔ x = y :=
+(@encode_injective α _).eq_iff
+
+instance : pencodable (option α) :=
+{ encode := λ x, ptree.of_option (x.map encode),
+  decode := λ v, (ptree.to_option v).map decode,
+  encodek := λ x, by simp, }
+
+def to_encodable : encodable α :=
+encodable.of_left_inverse encode decode (by simp)
+
+end pencodable
 
 end ptree
 
-
-namespace function
-
-
-end function

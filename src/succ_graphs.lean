@@ -5,6 +5,7 @@ import computability.turing_machine
 
 open relation (refl_trans_gen)
 
+@[ext]
 structure execution (σ : Type*) :=
 (next : σ →. option σ)
 (start : σ)
@@ -243,6 +244,10 @@ end,
   (f.track_with state s).eval.dom ↔ f.eval.dom :=
 (tr_of_track_with f state s hd).eval_dom_iff.symm 
 
+lemma track_with_change_start (s' : τ × σ) :
+  (execution.mk (f.track_with state s).next s') = (execution.mk f.next s'.2).track_with state s'.1 :=
+by { ext : 1, { simp [execution.track_with], }, { simp, } }
+
 section time_with
 
 def execution.time_with (time : σ →. ℕ) : execution (ℕ × σ) :=
@@ -282,6 +287,34 @@ begin
 end)
   (by simp [execution.time_with])
 
+@[simps]
+def stepwise_tr.time_with_pure_tr_aux {f : execution σ} {g : execution τ} (h : f ∼ₛ g) :
+  f.time_with (pfun.pure 1) ∼ₛ g.time_with (pfun.pure 1) :=
+((f.time_with_tr (pfun.pure 1) (by simp)).symm.trans h).trans (g.time_with_tr (pfun.pure 1) (by simp))
+
+def stepwise_tr.time_with_pure_tr {f : execution σ} {g : execution τ} (h : f ∼ₛ g) :
+  f.time_with (pfun.pure 1) ∼ₛ g.time_with (pfun.pure 1) :=
+h.time_with_pure_tr_aux.extend (λ n₁ n₂, n₁.1 = n₂.1) 
+(by { rintros ⟨t₀, x₀⟩ ⟨t₀', y₀⟩ ⟨t₁, x₁⟩ ⟨t₁', y₁⟩, simp [execution.time_with], intros, subst_vars, })
+rfl
+
+@[simp] lemma stepwise_tr.time_with_pure_tr_rel {f : execution σ} {g : execution τ} {h : f ∼ₛ g} {s₀ : ℕ × σ} {s₁ : ℕ × τ} :
+  h.time_with_pure_tr.rel s₀ s₁ ↔ s₀.1 = s₁.1 ∧ h.rel s₀.2 s₁.2 ∧ s₀.2 ∈ f.states ∧ s₁.2 ∈ g.states :=
+by { simp [stepwise_tr.time_with_pure_tr], tidy, }
+
+private lemma stepwise_tr.time_pure_eq_aux {f : execution σ} {g : execution τ} (h : f ∼ₛ g) {T}
+  (hT : T ∈ f.time (pfun.pure 1)) : T ∈ g.time (pfun.pure 1) :=
+begin
+  simp [execution.time] at hT ⊢,
+  rcases hT with ⟨x, hx⟩,
+  obtain ⟨⟨t', y⟩, h₁, h₂⟩ := h.time_with_pure_tr.mem_eval_of hx,
+  use y, simp at h₂, rwa h₂.1,
+end
+
+lemma stepwise_tr.time_pure_eq {f : execution σ} {g : execution τ} (h : f ∼ₛ g) :
+  f.time (pfun.pure 1) = g.time (pfun.pure 1) :=
+by { ext T, split, { exact stepwise_tr.time_pure_eq_aux h, }, { exact stepwise_tr.time_pure_eq_aux h.symm, } }
+
 theorem execution.time_le (J : ℕ) (time : σ →. ℕ) (hd : ∀ ⦃x y⦄, x ∈ f.states → some y ∈ f.next x → (time x).dom)
   (hJ : ∀ ⦃x t⦄, x ∈ f.states → t ∈ time x → t ≤ J) {N} (hN : N ∈ f.time (pfun.pure 1)) :
   ∃ t, t ∈ f.time time ∧ t ≤ J * N :=
@@ -291,6 +324,47 @@ begin
   have := R.symm.mem_eval_of ht₂, simp at this,
   rcases this with ⟨t, x, ht, _, H⟩,
   exact ⟨t, ⟨x, ht⟩, H⟩,
+end
+
+@[simps]
+def execution.time_tr_self (time : σ →. ℕ) (t₀ : ℕ) :
+  f.time_with time ∼ₛ (f.track_with (λ n s, (time s).map (+n)) t₀) :=
+{ rel := λ a b, b.1 = a.1 + t₀ ∧ b.2 = a.2,
+  dom_iff := λ x y hx hy, by { cases x, cases y, dsimp only, rintros ⟨rfl, rfl⟩, simp [execution.time_with], },
+  some_iff := λ x y x' y' hx hy, 
+begin
+  cases x, cases y, cases x', cases y', dsimp only,
+  rintros ⟨rfl, rfl⟩, simp [execution.time_with],
+  rintros _ h₀ rfl h₁ _ h₂ rfl h₃,
+  cases part.mem_unique h₀ h₂, cases part.mem_unique h₁ h₃, simp [add_assoc],
+end,
+  none_iff := λ x y hx hy, by { cases x, cases y, dsimp only, rintros ⟨rfl, rfl⟩, simp [execution.time_with], },
+  start := by simp [execution.time_with] }
+
+theorem execution.time_fwd (time : σ →. ℕ)  (t₀ : ℕ) :
+  (f.track_with (λ n s, (time s).map (+n)) t₀).eval = (f.time_with time).eval.map (prod.map (+t₀) id) :=
+begin
+  let R := (f.time_tr_self time t₀), apply part.ext',
+  { rw R.symm.eval_dom_iff, simp, },
+  intros h₁ h₂, rw part.dom_iff_mem at h₁ h₂, rcases h₁ with ⟨⟨t₁, s₁⟩, h₁⟩, rcases h₂ with ⟨⟨t₂, s₂⟩, h₂⟩, rw [part.get_eq_of_mem h₁, part.get_eq_of_mem h₂],
+  simp at h₂, rcases h₂ with ⟨t₂, h₂, rfl⟩,
+  have := R.rel_of_mem_eval h₂ h₁, simpa,
+end
+
+theorem execution.start_time_le_time (time : σ →. ℕ) {t₀ N : ℕ} (hN : ∃ xf : σ, (N, xf) ∈ (f.track_with (λ n s, (time s).map (+n)) t₀).eval) :
+  t₀ ≤ N :=
+begin
+  simp_rw execution.mem_eval at hN, rcases hN with ⟨xf, H, _⟩,
+  apply @execution.step_induction _ (λ S : ℕ × σ, t₀ ≤ S.1) _ _ H,
+  { simp, }, { rintros ⟨_, _⟩ ⟨_, _⟩ _ h, simp, rintros _ _ rfl _, refine h.trans _, simp, }
+end
+
+theorem execution.state_time_le_time (time : σ →. ℕ) {N} (hN : N ∈ f.time time) {s : ℕ × σ} (hs : s ∈ (f.time_with time).states) :
+  s.1 ≤ N :=
+begin
+  simp [execution.time, ← execution.eval_from hs] at hN,
+  simp [execution.time_with, track_with_change_start] at hN, 
+  exact execution.start_time_le_time _ time hN,
 end
 
 end time_with

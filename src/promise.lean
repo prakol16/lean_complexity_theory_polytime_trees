@@ -28,7 +28,17 @@ end
 def polytime_promise (c : code) (promise : set ptree) : Prop :=
 ∃ p : polynomial ℕ, time_bound_promise c promise (λ n, p.eval n)
 
-def polytime_promise_comp {c₁ c₂ : code} {P₁ P₂ : set ptree} :
+lemma polytime_promise_comp {c₁ c₂ : code} {P₁ P₂ : set ptree} :
   polytime_promise c₁ P₁ → polytime_promise c₂ P₂ → polytime_promise (c₁.comp c₂) (P₂ ∩ c₂.eval.preimage P₁)
 | ⟨p₁, e₁⟩ ⟨p₂, e₂⟩ := by { use (p₁.comp p₂) + p₂ + 1, convert time_bound_promise_comp (monotone_polynomial_nat _) e₁ e₂, simp, }
 
+@[simp] lemma polytime_promise.univ {c : code} :
+  polytime_promise c set.univ ↔ polytime c :=
+by simp [polytime_promise, polytime]
+
+lemma pfun.mem_ran_iff {α β} {f : α →. β} {x} :
+  x ∈ f.ran ↔ ∃ y, x ∈ f y := by refl
+
+@[simp] lemma pfun.preimage_ran {α β} (f : α →. β) :
+  f.preimage f.ran = f.dom :=
+by { ext, simp [pfun.mem_ran_iff], tauto, }

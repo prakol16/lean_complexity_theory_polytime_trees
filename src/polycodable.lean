@@ -2,16 +2,13 @@ import polycodable_init
 import polytime_tac
 
 variables {α β γ : Type*} [polycodable α] [polycodable β] [polycodable γ]
-open polycodable (encode decode)
+open ptree.pencodable (encode decode)
 
 section bool
 
 instance : polycodable bool :=
-{ encode := λ b, cond b ptree.nil ptree.non_nil,
-  decode := λ v, if v = ptree.nil then tt else ff,
-  decode_encode := λ b, by cases b; simp,
-  polytime_decode := ⟨_, 
-  (polytime_ite polytime_id polytime_nil (polytime_const ptree.non_nil)), λ x, by cases x; simp [ptree.of_option]⟩ }
+{ polytime_decode := ⟨_, 
+  (polytime_ite polytime_id polytime_nil (polytime_const ptree.non_nil)), λ x, by cases x; simp [ptree.of_option, encode, decode]⟩ }
 
 @[polyfun]
 lemma polytime_fun.ite' {f : α → bool} {g h : α → β} : polytime_fun f → polytime_fun g → polytime_fun h → polytime_fun (λ x, cond (f x) (g x) (h x))
@@ -74,14 +71,10 @@ end bool
 section option
 
 instance : polycodable (option α) :=
-{ encode := λ x, ptree.of_option (x.map encode),
-  decode := λ v, (ptree.to_option v).map decode,
-  decode_encode := λ x, by simp,
-  polytime_decode :=
+{ polytime_decode :=
 begin
-  rw polytime_fun_iff',
   convert_to polytime_fun (λ x : ptree, if x = ptree.nil then ptree.nil else ptree.of_option (some (encode (decode x.right : α)))),
-  { ext x, cases x; simp [ptree.to_option, ptree.of_option], },
+  { ext x, cases x; simp [ptree.to_option, ptree.of_option, encode, decode], },
   simp only [ptree.of_option], polyfun,
 end }
 
@@ -132,27 +125,22 @@ section mk
 
 def polycodable.mk' {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
   (polytime_decode : polytime_fun (encode ∘ decode)) : polycodable δ :=
-{ encode := λ x, polycodable.encode (encode x),
-  decode := λ y, decode (polycodable.decode y),
-  decode_encode := by simp [encode_decode],
-  polytime_decode :=
-by { rw polytime_fun_iff', polyfun, apply polytime_fun.comp polytime_decode, polyfun, } }
+{ polytime_decode :=
+by { apply polytime_fun.comp polytime_decode, polyfun, },
+  ..ptree.pencodable.mk' encode decode encode_decode, }
 
-@[polyfun]
-lemma polycodable.mk_encode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
-  (polytime_decode : polytime_fun (encode ∘ decode)) :
-  @polytime_fun δ α (polycodable.mk' encode decode encode_decode polytime_decode) _ encode :=
+lemma polycodable.mk_encode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x) :
+  @polytime_fun δ α (ptree.pencodable.mk' encode decode encode_decode) _ encode :=
 by { apply polytime_fun.id, }
 
-@[polyfun]
 lemma polycodable.mk_decode' {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
   (polytime_decode : polytime_fun (encode ∘ decode)) :
-  @polytime_fun α δ _ (polycodable.mk' encode decode encode_decode polytime_decode) decode :=
+  @polytime_fun α δ _ (polycodable.mk' encode decode encode_decode polytime_decode).to_pencodable decode :=
 polytime_decode
 
 lemma polycodable.mk_decode {δ : Type*} (encode : δ → α) (decode : α → δ) (encode_decode : ∀ x, decode (encode x) = x)
-  (polytime_decode : polytime_fun (encode ∘ decode)) (f : β → δ) (hf : polytime_fun (encode ∘ f)) :
-  @polytime_fun β δ _ (polycodable.mk' encode decode encode_decode polytime_decode) f :=
+  (f : β → δ) (hf : polytime_fun (encode ∘ f)) :
+  @polytime_fun β δ _ (ptree.pencodable.mk' encode decode encode_decode) f :=
 hf
 
 def polycodable.of_equiv {δ : Type*} (eqv : δ ≃ α) : polycodable δ :=
@@ -164,12 +152,12 @@ polycodable.mk'
 
 @[polyfun]
 lemma polycodable.of_equiv_polytime {δ : Type*} (eqv : δ ≃ α) :
-  @polytime_fun δ α (polycodable.of_equiv eqv) _ eqv :=
+  @polytime_fun δ α (ptree.pencodable.of_equiv eqv) _ eqv :=
 by { apply polytime_fun.id, }
 
 @[polyfun]
 lemma polycodable.of_equiv_polytime_symm {δ : Type*} (eqv : δ ≃ α) :
-  @polytime_fun α δ _ (polycodable.of_equiv eqv) eqv.symm :=
+  @polytime_fun α δ _ (polycodable.of_equiv eqv).to_pencodable eqv.symm :=
 by { apply polycodable.mk_decode', }
 
 end mk
@@ -177,10 +165,7 @@ end mk
 section unit
 
 instance : polycodable unit := 
-{ encode := λ _, ptree.nil,
-  decode := λ _, (),
-  decode_encode := by simp,
-  polytime_decode := polytime_fun.const ptree.nil }
+{ polytime_decode := polytime_fun.const ptree.nil }
 
 end unit
 

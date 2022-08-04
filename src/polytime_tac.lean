@@ -30,7 +30,7 @@ meta def is_polycodable (e : expr) : tactic bool :=
 (do
    e' ← infer_type e,
    cache ← mk_instance_cache e',
-   (cache', s) ← instance_cache.get cache ``polycodable,
+   (cache', s) ← instance_cache.get cache ``ptree.pencodable,
    return tt) <|> (return ff)
 
 meta def get_num_params : tactic ℕ :=
@@ -90,6 +90,6 @@ attribute [polyfun]
   polytime_fun.encode
   polytime_fun.decode'
 @[polyfun]
-lemma polytime_fun.id' {α} [polycodable α] : polytime_fun (λ x : α, x) := polytime_fun.id
+lemma polytime_fun.id' {α} [ptree.pencodable α] : polytime_fun (λ x : α, x) := polytime_fun.id
 
 end
