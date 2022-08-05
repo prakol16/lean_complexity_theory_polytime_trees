@@ -119,6 +119,13 @@ begin
   { ext a b, cases a; simp, }, polyfun,
 end
 
+@[polyfun]
+lemma polytime_fun.is_some : polytime_fun (@option.is_some α) :=
+begin
+  convert_to polytime_fun (λ (a : option α), a.elim ff (λ _, tt)),
+  { ext x, cases x; simp, }, polyfun,
+end
+
 end option
 
 section mk

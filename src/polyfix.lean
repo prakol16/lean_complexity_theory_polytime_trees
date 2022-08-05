@@ -140,11 +140,11 @@ begin
   simp at hr₂, rcases hr₂ with ⟨rfl, rfl, rfl⟩, exact hr₁,
 end
 
-noncomputable theory
-open_locale classical
+noncomputable instance penc_states {σ : Type*} [ptree.pencodable σ] (f : execution σ) : ptree.pencodable f.states :=
+@set_encodable _ _ _ (classical.dec_pred _) _ f.start_mem_states
 
-noncomputable instance {σ : Type*} [polycodable σ] (f : execution σ) : ptree.pencodable f.states :=
-set_encodable _ f.start_mem_states
+lemma penc_states_encode {σ} [ptree.pencodable σ] {f : execution σ} (x : f.states) :
+  encode (x : σ) = encode x := rfl
 
 theorem polytime_fun.eval_of_polysize {α β} [polycodable α] [polycodable β] {f : β → α → bool × α} {init : β → bool × α}
   (hf : polytime_fun₂ f) (hinit : polytime_fun init)
@@ -199,8 +199,8 @@ begin
   rw ← part.eq_some_iff at n_mem, simp [n_mem],
 end
 
-theorem polytime_fun.evaln_of_polysize {α β} [polycodable α] [polycodable β] {f : β → α → bool × α} {init : β → bool × α}
-  (hf : polytime_fun₂ f) (hinit : polytime_fun init) (N : β → ℕ)
+theorem polytime_fun.evaln_of_polysize {α β} [polycodable α] [polycodable β] (f : β → α → bool × α) (init : β → bool × α)
+  (N : β → ℕ) (hf : polytime_fun₂ f) (hinit : polytime_fun init)
   (hfs : polysize_fun_safe (λ (x₀ : β) (y : (mk_iterator ↑(f x₀) (init x₀)).states), f x₀ (y : bool × α).2))
   (hn : ∃ q : polynomial ℕ, ∀ x₀, N x₀ ≤ q.eval (encode x₀).sizeof) 
   (g : β → α) (hg : ∀ x, g x ∈ iterator_evaln (f x) (N x) (init x)) : polytime_fun g :=

@@ -15,6 +15,8 @@ by { cases (encode x); simp, linarith only, }
 @[simp] lemma encode_sizeof_pair (a : α) (b : β) : (encode (a, b)).sizeof = (encode a).sizeof + (encode b).sizeof + 1 :=
 by { simp [encode], ac_refl, }
 
+@[simp] lemma encode_sizeof_unit (x : unit) : (encode x).sizeof = 1 :=
+by simp [encode]
 
 @[simp] lemma encode_sizeof_nil : (encode ([] : list γ)).sizeof = 1 :=
 by simp [encode]
@@ -55,10 +57,13 @@ by { induction l with hd tl ih, { simp, }, simp [ih], ac_refl, }
   (encode l.reverse).sizeof = (encode l).sizeof :=
 by { simp [encode_list_sizeof, list.sum_reverse], }
 
-lemma len_le_encode_sizeof (a : list γ) :
+lemma len_le_encode_sizeof' (a : list γ) :
   a.length + 1 ≤ (encode a).sizeof :=
 by { induction a with hd tl ih, { simp, }, simp, linarith, }
 
+lemma len_le_encode_sizeof (a : list γ) :
+  a.length ≤ (encode a).sizeof :=
+by { refine trans _ (len_le_encode_sizeof' a), simp, }
 
 def polysize_fun (f : α → β) : Prop :=
 ∃ p : polynomial ℕ, ∀ (x : α), (encode (f x)).sizeof ≤ p.eval (encode x).sizeof
@@ -103,14 +108,6 @@ lemma polysize_fun.comp₃ {f : α → β → γ → δ} {g : ε → α} {h : ε
   polysize_fun (λ s, f (g s) (h s) (i s)) :=
 polysize_fun.comp hf (polysize_fun.pair hg (polysize_fun.pair hh hi))
 
-lemma polysize_fun_of_fin_range [fintype β] (f : α → β) : polysize_fun f :=
-begin
-  haveI : nonempty β := ⟨decode ptree.nil⟩,
-  let B := ((finset.image (λ x : β, (encode x).sizeof) finset.univ).max' _ : ℕ),
-  { use B, intro x, simp, apply finset.le_max', simp, },
-  simpa using finset.univ_nonempty,
-end
-
 variables {σ : α → Type*} [∀ x, pencodable (σ x)]
 def polysize_fun_safe (f : Π x, (σ x) → γ) : Prop :=
 ∃ p : polynomial ℕ, ∀ (x : α) (y : σ x), (encode (f x y)).sizeof ≤ (encode y).sizeof + p.eval (encode x).sizeof
@@ -141,6 +138,21 @@ begin
   { rintro ⟨p, hp⟩, exact ⟨p, λ _ _, (hp _).trans rfl.le⟩ },
 end
 
+lemma polysize_fun_uniform.to_safe {f : Π x, σ x → γ} : polysize_fun_uniform f → polysize_fun_safe f
+| ⟨p, hp⟩ := ⟨p, λ x y, (hp x y).trans (by simp)⟩
+
+lemma polysize_uniform_of_fin_range [fintype γ] (f : Π x, σ x → γ) :
+  polysize_fun_uniform f :=
+begin
+  haveI : nonempty γ := ⟨decode ptree.nil⟩,
+  let B := ((finset.image (λ x : γ, (encode x).sizeof) finset.univ).max' _ : ℕ),
+  { use B, intros x _, simp, apply finset.le_max', simp, },
+  simpa using finset.univ_nonempty,
+end
+
+lemma polysize_fun_of_fin_range [fintype β] (f : α → β) : polysize_fun f :=
+by simpa using (show polysize_fun_uniform (λ x (y : unit), f x), from polysize_uniform_of_fin_range _)
+
 lemma polysize_fun_uniform.pair {f : Π x, (σ x) → β} {g : Π x, (σ x) → γ} :
   polysize_fun_uniform f → polysize_fun_uniform g → polysize_fun_uniform (λ x y, (f x y, g x y))
 | ⟨pf, hpf⟩ ⟨pg, hpg⟩ :=
@@ -150,8 +162,9 @@ begin
   simp, mono,
 end
 
-lemma polysize_fun_safe.comp {δ : Type*} {ε : δ → Type*} [pencodable δ] [∀ x, pencodable (ε x)]
-  {f : α → β → γ} {g : Π x, ε x → α} {h : Π x, ε x → β} :
+variables {ι : Type*} {ζ : ι → Type*} [pencodable ι] [∀ x, pencodable (ζ x)]
+lemma polysize_fun_safe.comp
+  {f : α → β → γ} {g : Π x, ζ x → α} {h : Π x, ζ x → β} :
   polysize_fun_safe f → polysize_fun_uniform g → polysize_fun_safe h →
   polysize_fun_safe (λ x y, f (g x y) (h x y))
 | ⟨pf, hf⟩ ⟨pg, hg⟩ ⟨ph, hh⟩ :=
@@ -161,6 +174,69 @@ begin
   refine (hf _ _).trans _,
   simp [← add_assoc], mono*,
 end
+
+lemma polysize_fun_safe.comp'
+  {f : β → γ} {g : Π x, ζ x → β} (hf : polysize_fun_safe (λ (_ : unit), f)) (hg : polysize_fun_safe g) : polysize_fun_safe (λ x y, f (g x y)) :=
+by { apply hf.comp, { exact polysize_uniform_of_fin_range default, }, exact hg, }
+
+lemma polysize_fun_uniform.comp {f : α → β → γ} {g : Π x, ζ x → α} {h : Π x, ζ x → β} :
+  polysize_fun_uniform f → polysize_fun_uniform g → polysize_fun_uniform (λ x y, f (g x y) (h x y))
+| ⟨pf, hf⟩ ⟨pg, hg⟩ :=
+begin
+  use pf.comp pg, intros x y, simp,
+  refine (hf _ _).trans _, mono,
+end
+
+lemma polysize_fun_uniform.comp' {f : β → γ} {g : Π x, ζ x → β} :
+  polysize_fun_safe (λ (_ : unit), f) → polysize_fun_uniform g → polysize_fun_uniform (λ x y, f (g x y))
+| ⟨pf, hf⟩ ⟨pg, hg⟩ :=
+begin
+  use pg + (pf.eval 1), intros x y, simp at hf hg ⊢,
+  refine (hf () (g x y)).trans _, simpa using hg _ _,
+end
+
+lemma polysize_fun_safe.pair_left {f : Π x, σ x → γ} {g : Π x, σ x → β}
+  (hf : polysize_fun_uniform f) (hg : polysize_fun_safe g) :
+  polysize_fun_safe (λ x y, (f x y, g x y)) :=
+begin
+  rcases hf with ⟨pf, hf⟩, rcases hg with ⟨pg, hg⟩,
+  use pg + pf + 1, intros x y, simp [← add_assoc],
+  conv_lhs { rw add_comm, }, mono,
+end
+
+lemma polysize_fun_safe.pair_right {f : Π x, σ x → γ} {g : Π x, σ x → β}
+  (hf : polysize_fun_safe f) (hg : polysize_fun_uniform g) :
+  polysize_fun_safe (λ x y, (f x y, g x y)) :=
+begin
+  rcases hf with ⟨pf, hf⟩, rcases hg with ⟨pg, hg⟩,
+  use pf + pg + 1, intros x y, simp [← add_assoc], mono,
+end
+
+lemma polysize_fun_safe.tail (α : Type*) [pencodable α] : polysize_fun_safe (λ (_ : α), @list.tail β) :=
+⟨0, λ _ y, by simpa using encode_sizeof_le_of_sublist (y.tail_sublist)⟩
+
+lemma polysize_fun_safe.fst (α : Type*) [pencodable α] : polysize_fun_safe (λ (_ : α), @prod.fst β γ) :=
+⟨0, λ _ ⟨y₁, y₂⟩, by simp [add_assoc]⟩
+
+lemma polysize_fun_safe.snd (α : Type*) [pencodable α] : polysize_fun_safe (λ (_ : α), @prod.snd β γ) :=
+⟨0, λ _ ⟨y₁, y₂⟩, by { simp, linarith only, }⟩
+
+lemma polysize_fun.id : polysize_fun (@id α) :=
+⟨polynomial.monomial 1 1, λ x, by simp⟩
+
+lemma polysize_fun_safe.id : polysize_fun_safe (λ (_ : α) (x : β), x) :=
+⟨0, λ _ x, by simp⟩
+
+lemma polysize_fun_safe.ite {f g : Π x, σ x → γ} {P : Π x, σ x → Prop} [∀ (x : α) (y : σ x), decidable (P x y)]
+  (hf : polysize_fun_safe f) (hg : polysize_fun_safe g) : polysize_fun_safe (λ x y, if P x y then f x y else g x y) :=
+begin
+  rcases hf with ⟨pf, hf⟩, rcases hg with ⟨pg, hg⟩, use pf + pg,
+  intros x y, dsimp only, split_ifs,
+  { refine (hf _ _).trans _, simp, }, { refine (hg _ _).trans _, simp, },
+end
+
+lemma polysize_fun_safe.cons : polysize_fun_safe (@list.cons α) :=
+by { use polynomial.monomial 1 1 + 1, intros x y, simp [add_comm], }
 
 def set_encodable (S : set α) [decidable_pred (∈ S)] {d : α} (hd : d ∈ S) : ptree.pencodable S :=
 ptree.pencodable.mk'

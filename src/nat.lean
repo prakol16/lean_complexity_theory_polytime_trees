@@ -2,7 +2,7 @@ import data.num.lemmas
 import lists
 
 namespace pos_num
-
+#exit
 def to_trailing_bits : pos_num → list bool
 | 1 := []
 | (bit0 xs) := ff :: xs.to_trailing_bits
