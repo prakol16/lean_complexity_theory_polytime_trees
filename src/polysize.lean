@@ -18,6 +18,12 @@ by { simp [encode], ac_refl, }
 @[simp] lemma encode_sizeof_unit (x : unit) : (encode x).sizeof = 1 :=
 by simp [encode]
 
+@[simp] lemma polysize_fun.encode_tt_sizeof : (encode tt).sizeof = 1 :=
+by simp [encode]
+
+@[simp] lemma polysize_fun.encode_ff_sizeof : (encode ff).sizeof = 3 :=
+by simp [encode]
+
 @[simp] lemma encode_sizeof_nil : (encode ([] : list γ)).sizeof = 1 :=
 by simp [encode]
 @[simp] lemma encode_sizeof_cons (a : γ) (b : list γ) :
@@ -234,6 +240,12 @@ begin
   intros x y, dsimp only, split_ifs,
   { refine (hf _ _).trans _, simp, }, { refine (hg _ _).trans _, simp, },
 end
+
+lemma _root_.bool.cond_eq_ite (x y : α) (b : bool) : cond b x y = if b then x else y := by cases b; refl
+
+lemma polysize_fun_safe.cond {f g : Π x, σ x → γ} {P : Π x, σ x → bool} 
+  (hf : polysize_fun_safe f) (hg : polysize_fun_safe g) : polysize_fun_safe (λ x y, cond (P x y) (f x y) (g x y)) :=
+by { simp_rw bool.cond_eq_ite, exact polysize_fun_safe.ite hf hg, }
 
 lemma polysize_fun_safe.cons : polysize_fun_safe (@list.cons α) :=
 by { use polynomial.monomial 1 1 + 1, intros x y, simp [add_comm], }

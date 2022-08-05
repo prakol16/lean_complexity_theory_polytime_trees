@@ -9,6 +9,10 @@ attribute [polyfun]
   polytime_fun.id
   polytime_fun.const
 
+@[polyfun]
+lemma polytime_fun.id' {α} [ptree.pencodable α] : polytime_fun (λ x : α, x) := polytime_fun.id
+
+
 namespace tactic
 
 meta def polytime_fun_lemmas : list name :=
@@ -49,7 +53,9 @@ do fail_if_success `[exact polytime_fun.const _],
    s' ← to_expr s,
    apply s' {md := md},
    try `[ any_goals { apply_instance, } ],
-   when (n = 1) (fail_if_success `[swap, exact polytime_fun.id]),
+   when (n = 1) (fail_if_success
+    (swap >> ((to_expr ``(polytime_fun.id) >>= λ e, exact e md) <|>
+             (to_expr ``(polytime_fun.id')) >>= λ e, exact e md))),
    return (n-1)
 
 meta def polyfun_tactics (md : transparency := reducible) : list (tactic string) :=
@@ -89,7 +95,5 @@ attribute [polyfun]
   polytime_fun.ptree_right
   polytime_fun.encode
   polytime_fun.decode'
-@[polyfun]
-lemma polytime_fun.id' {α} [ptree.pencodable α] : polytime_fun (λ x : α, x) := polytime_fun.id
 
 end

@@ -379,4 +379,10 @@ lemma polytime_fun.all {f : β → α → bool} {l : β → list α}
   (hf : polytime_fun₂ f) (hl : polytime_fun l) : polytime_fun (λ s, (l s).all (f s)) :=
 by { dunfold list.all, polyfun, exact (polysize_uniform_of_fin_range _).to_safe, }
 
+@[polyfun]
+lemma polytime_fun.unary_nat_le {f g : β → ℕ} (hf : polytime_fun f) (hg : polytime_fun g) :
+  polytime_fun (λ s, ((f s) ≤ (g s) : bool)) :=
+by { convert_to polytime_fun (λ s, ((f s) - (g s) = 0 : bool)), { simp, }, polyfun, }
+
 end list
+
