@@ -59,21 +59,3 @@ begin
   rcases h with ⟨x, h⟩, rw ← part.eq_some_iff at h, rw h,
   simp,
 end
-
-lemma ite_dom (cond : code) (t : code) (f : code) (x : ptree) :
-  ((cond.ite t f).eval x).dom ↔ ∃ r : ptree, r ∈ cond.eval x ∧
-    (r = ptree.nil → (t.eval x).dom) ∧
-    (r ≠ ptree.nil → (f.eval x).dom) :=
-begin
-  by_cases (cond.eval x).dom, swap,
-  { simp [h], intros _ H, exfalso, exact h (part.dom_iff_mem.mpr ⟨_, H⟩), },
-  rw part.dom_iff_mem at h, cases h with r hr,
-  split,
-  { intro h, use [r, hr], 
-    rw ← part.eq_some_iff at hr,
-    simp [hr] at h,
-    split_ifs at h; tauto, },
-  rintro ⟨r', hr', H₁, H₂⟩, cases part.mem_unique hr hr',
-  rw ← part.eq_some_iff at hr,
-  simp [hr], split_ifs; tauto,
-end

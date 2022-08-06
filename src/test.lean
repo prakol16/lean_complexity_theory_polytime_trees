@@ -1,4 +1,6 @@
 import data.pfun
+import data.real.basic
+import tactic.polyrith
 
 namespace pfun
 variables {α β γ δ ε ι : Type*}
@@ -32,3 +34,37 @@ ext $ λ ⟨_, _⟩ ⟨_, _⟩, by { simp, tauto, }
 
 
 end pfun
+
+
+section
+
+lemma mul_inv_one_of_ne {k : Type*} [field k] {a b : k} (h : a ≠ b) : (a - b) * (a - b)⁻¹ = 1 :=
+by simp [sub_ne_zero_of_ne h]
+
+theorem mathd_train_algebra_217
+  (a b : ℝ)
+  (f g : ℝ → ℝ)
+  (h₀ : ∀ x, f x = a * x + b)
+  (h₁ : ∀ x, g x = b * x + a)
+  (h₂ : a ≠ b)
+  (h₃ : ∀ x, f (g x) - g (f x) = b - a) :
+  a + b = 0 :=
+begin
+  simp_rw [h₀, h₁] at h₃,
+  polyrith [h₃ 0, mul_inv_one_of_ne h₂],
+end
+
+example (a b : ℤ) (h : a * b = 1) (h₂ : a = 0) : (1 : ℤ) = 0 :=
+by { linear_combination -h + b * h₂, }
+
+structure line := (a : ℝ) (b : ℝ)
+def line.contains (l : line) (p : ℝ × ℝ) : Prop :=
+p.snd = l.a * p.fst + l.b
+
+-- example {x₀ x₁ y₀ y₁ : ℝ} (h : x₀ ≠ x₁) : set.subsingleton {l : line | l.contains (x₀, y₀) ∧ l.contains (x₁, y₁) } :=
+-- by { rintros ⟨a, b⟩ ⟨H₁, H₂⟩ ⟨a', b'⟩ ⟨H₁', H₂'⟩, simp [line.contains] at *, split; polyrith [mul_inv_one_of_ne h], }
+
+example {x : ℝ} (hx : x^2 = 0) : x = 0 :=
+by { by_contra, apply @one_ne_zero ℝ, polyrith [mul_inv_one_of_ne h], }
+
+end
