@@ -7,6 +7,53 @@ variables {α β γ δ ε : Type*} [pencodable α] [pencodable β] [pencodable �
 
 open ptree.pencodable (encode decode)
 
+class has_psize (α : Type*) [pencodable α] :=
+(psize : α → ℕ)
+(p_lower : ∃ p : polynomial ℕ, ∀ x, (encode x).sizeof ≤ p.eval (psize x))
+(p_upper : ∃ p : polynomial ℕ, ∀ x, psize x ≤ p.eval (encode x).sizeof)
+
+def default_has_psize (α : Type*) [pencodable α] : has_psize α :=
+{ psize := λ x, (encode x).sizeof,
+  p_lower := ⟨polynomial.monomial 1 1, λ x, le_of_eq (by simp)⟩,
+  p_upper := ⟨polynomial.monomial 1 1, λ x, le_of_eq (by simp)⟩ }
+
+-- def mk_has_psize_of_fintype (α : Type*) [fintype α] [pencodable α] (psize : α → ℕ) : has_psize α :=
+-- begin
+--   refine_struct { psize := psize }, sorry,
+--   -- suffices : ∀ (f g : α → ℕ), ∃ p : polynomial ℕ, 
+-- end
+
+open has_psize (psize)
+
+section psize
+variables [has_psize α] [has_psize β]
+
+noncomputable def psize_lower (α : Type*) [pencodable α] [has_psize α] : polynomial ℕ :=
+  (infer_instance : has_psize α).p_lower.some
+lemma psize_lower_spec (x : α) : (encode x).sizeof ≤ (psize_lower α).eval (psize x) :=
+    (infer_instance : has_psize α).p_lower.some_spec x
+noncomputable def psize_upper (α : Type*) [pencodable α] [has_psize α] : polynomial ℕ :=
+  (infer_instance : has_psize α).p_upper.some
+lemma psize_upper_spec (x : α) : psize x ≤ (psize_upper α).eval (encode x).sizeof :=
+    (infer_instance : has_psize α).p_upper.some_spec x
+
+instance : has_psize ptree := default_has_psize _
+instance : has_psize (α × β) :=
+{ psize := λ x, psize x.1 + psize x.2,
+  p_lower := ⟨1 + (psize_lower α + psize_lower β), λ ⟨x₁, x₂⟩, 
+  begin
+    simp [encode, add_assoc],
+    mono; refine (psize_lower_spec _).trans _; mono; simp,
+  end⟩,
+  p_upper := ⟨psize_upper α + psize_upper β, λ ⟨x₁, x₂⟩,
+  begin
+    simp,
+    mono; refine (psize_upper_spec _).trans _; mono; simp [encode]; linarith only,
+  end⟩ }
+-- instance {α : Type*} [pencodable α] : has_psize (list α) := 
+
+end psize
+
 @[simp] lemma encode_sizeof_ptree (x : ptree) : (encode x).sizeof = x.sizeof := rfl
 lemma one_le_encode_sizeof (x : α) :
   1 ≤ (encode x).sizeof :=

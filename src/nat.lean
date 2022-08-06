@@ -142,7 +142,7 @@ by simpa [pos_num.nat_size_to_nat] using nat.add_size_le m n
 lemma add_size_le' (m n : pos_num) : (m + n).nat_size ≤ m.nat_size + n.nat_size + 1 :=
 by { refine (add_size_le _ _).trans _, simp, }
 
-lemma polysize_fun_safe_add_size_le : polysize_fun_safe pos_num.add :=
+lemma polysize_fun_safe_pos_num_add : polysize_fun_safe pos_num.add :=
 ⟨polynomial.monomial 1 1 + 2*bit_encode_size + 1, 
 λ m n, by { zify, refine (le_of_size_le (add_size_le' _ _)).trans (le_of_eq _), simp [encode_pos_num_sizeof_eq_size], ring_nf, }⟩
 
@@ -162,9 +162,7 @@ end
 
 @[reducible]
 private def add'_foldr (bs : bool × bool) (ih : pos_num) : pos_num :=
-cond bs.1 
-  (cond bs.2 ih.succ.bit0 ih.bit1)
-  (cond bs.2 ih.bit1 ih.bit0)
+cond bs.1 (cond bs.2 ih.succ.bit0 ih.bit1) (cond bs.2 ih.bit1 ih.bit0)
 
 private lemma add'_foldr_polytime : polytime_fun₂ add'_foldr :=
 by polyfun
@@ -193,7 +191,7 @@ private def add' (m n : pos_num) : pos_num :=
 
 @[simp] private lemma add'_case0 (m : pos_num) : add' 1 m = m.succ := by simp [add', add'_init]
 @[simp] private lemma add'_case1 (n : pos_num) : add' n 1 = n.succ := by simpa [add', add'_init] using eq.symm
-@[simp] private lemma add'_case2 (m n : pos_num) : add' m.bit0 n.bit0 = (add' m n).bit0 := by simp [add', add'_init, add'_foldr]
+@[simp] private lemma add'_case2 (m n : pos_num) : add' m.bit0 n.bit0 = (add' m n).bit0 := by simp [add', add'_foldr, add'_init]
 @[simp] private lemma add'_case3 (m n : pos_num) : add' m.bit1 n.bit1 = (add' m n).succ.bit0 := by simp [add', add'_init, add'_foldr]
 @[simp] private lemma add'_case4 (m n : pos_num) : add' m.bit0 n.bit1 = (add' m n).bit1 := by simp [add', add'_init, add'_foldr]
 @[simp] private lemma add'_case5 (m n : pos_num) : add' m.bit1 n.bit0 = (add' m n).bit1 := by simp [add', add'_init, add'_foldr]
@@ -218,11 +216,20 @@ begin
   { simp, apply polysize_of_polytime_fun, polyfun, }, { apply polysize_fun_safe.id, }
 end
 
-
+@[polyfun]
 lemma polytime_fun.pos_num_add : polytime_fun₂ pos_num.add :=
 by { change polytime_fun₂ (λ _ _, _), simp_rw pos_num_add_eq, exact polytime_fun.pos_num_add', }
 
+@[polyfun]
+lemma polytime_fun.pos_num_add' : polytime_fun₂ ((+) : pos_num → pos_num → pos_num) :=
+polytime_fun.pos_num_add
 
-
+lemma polytime_fun.pos_num_mul : polytime_fun₂ pos_num.mul :=
+begin
+  convert_to polytime_fun₂ (λ (a b : pos_num), (equiv_list_bool b).foldr (λ (b : bool) (acc : pos_num), cond b (a + acc.bit0) acc.bit0) a),
+  { ext a b, induction b; simp [pos_num.mul, *, add_comm], },
+  polyfun, apply polysize_fun_safe.cond, { apply polysize_fun_safe_pos_num_add.comp, { simp, apply polysize_of_polytime_fun, polyfun, }, { exact polysize_fun_bit0 _, } },
+  exact polysize_fun_bit0 _,
+end
 
 end
