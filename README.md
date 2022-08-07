@@ -40,7 +40,7 @@ There are a few files containing essentially dead code that need to be cleaned u
     of the fact that some function's growth is bounded by a polynomial in the input (possibly uniformly with respect to another input).
   - `polyfix.lean` -- Proves that repeatedly evaluating a polynomial time function $f : \sigma \rightarrow \sigma$ polynomially many times such that the
     state $\sigma$ doesn't grow to fast results in a polynomial time function.
-  - `lists.lean` -- Shows that many lemmas about lists run in polynomial time.
+  - `lists.lean` -- Shows that many functions about lists run in polynomial time.
   - `nat.lean` -- Shows that addition and multiplication of numbers encoded as bits run in polynomial time.
   
 ## Example of the tactic
