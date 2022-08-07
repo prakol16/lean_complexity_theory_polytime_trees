@@ -29,7 +29,7 @@ There are a few files containing essentially dead code that need to be cleaned u
   - `time_bound.lean` -- Defines what it means for a code `c` to run in time $T(n)$
   - `polytime.lean` -- Very short file that specializes the lemmas from `time_bound` to the case of polynomial bounds.
   - `polycodable_init.lean` -- Defines `polycodable` and `polytime_fun`.
-      In general, functions on other types $f : \alpha \-> \beta$ are said to run in polynomial time
+      In general, functions on other types $f : \alpha \rightarrow \beta$ are said to run in polynomial time
       if they have an encoding to `ptree` (many encodings e.g. unit, bool, pair, list, are defined in `plain_tree.lean`), and
       there is a code which runs in polynomial time and equals the function under this encoding. The encoding being a `polycodable`
       is the stronger property that `encode (decode x)` runs in polynomial time .This file sets up some basic
