@@ -297,6 +297,9 @@ by { simp_rw bool.cond_eq_ite, exact polysize_fun_safe.ite hf hg, }
 lemma polysize_fun_safe.cons : polysize_fun_safe (@list.cons α) :=
 by { use polynomial.monomial 1 1 + 1, intros x y, simp [add_comm], }
 
+lemma polysize_fun_safe.append : polysize_fun_safe (λ (a b : list α), a ++ b) :=
+by { use polynomial.monomial 1 1 + 1, intros x y, zify, simp, linarith only,  }
+
 def set_encodable (S : set α) [decidable_pred (∈ S)] {d : α} (hd : d ∈ S) : ptree.pencodable S :=
 ptree.pencodable.mk'
 (coe : S → α)

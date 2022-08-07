@@ -384,5 +384,24 @@ lemma polytime_fun.unary_nat_le {f g : β → ℕ} (hf : polytime_fun f) (hg : p
   polytime_fun (λ s, ((f s) ≤ (g s) : bool)) :=
 by { convert_to polytime_fun (λ s, ((f s) - (g s) = 0 : bool)), { simp, }, polyfun, }
 
+@[polyfun]
+lemma polytime_fun.list_join : polytime_fun (@list.join α) :=
+begin
+  convert_to polytime_fun (λ l : list (list α), l.foldr (++) []),
+  { ext l : 1, induction l; simp [*],}, polyfun, apply polysize_fun_safe.append.comp,
+  { simp, apply polysize_of_polytime_fun, polyfun, }, { exact polysize_fun_safe.id, }
+end
+
 end list
+
+section examples
+
+def list_product {α β} (l₁ : list α) (l₂ : list β) : list (α × β) :=
+(l₁.map (λ x, l₂.map (λ y, (x, y)))).join
+
+example {α β : Type*} [polycodable α] [polycodable β] :
+  polytime_fun₂ (λ (l₁ : list α) (l₂ : list β), list_product l₁ l₂) :=
+by { dunfold list_product, polyfun, }
+
+end examples
 
