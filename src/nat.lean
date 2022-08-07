@@ -160,6 +160,7 @@ begin
   apply polysize_fun_safe.ite, { simp, apply polysize_of_polytime_fun, polyfun, }, exact polysize_fun_safe.cons.comp (polysize_uniform_of_fin_range _) polysize_fun_safe.id,
 end
 
+-- Separated out for performance reasons
 @[reducible]
 private def add'_foldr (bs : bool × bool) (ih : pos_num) : pos_num :=
 cond bs.1 (cond bs.2 ih.succ.bit0 ih.bit1) (cond bs.2 ih.bit1 ih.bit0)
@@ -209,6 +210,8 @@ lemma pos_num_add_eq : ∀ (m n : pos_num),
 
 local attribute [semireducible] add'_foldr
 local attribute [semireducible] add'_init
+
+example {P : Prop} (a : P) : P ↔ true := (iff_true _).mpr a
 
 private lemma polytime_fun.pos_num_add' : polytime_fun₂ add' :=
 begin

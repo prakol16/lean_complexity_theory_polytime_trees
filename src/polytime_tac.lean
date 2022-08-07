@@ -38,7 +38,7 @@ meta def is_polycodable (e : expr) : tactic bool :=
    return tt) <|> (return ff)
 
 meta def get_num_params : tactic ℕ :=
-do `(polytime_fun %%s) ← tactic.target,
+do `(polytime_fun %%s) ← target,
     guard s.is_lambda,
     mv ← mk_meta_var s.binding_domain,
     e ←  instantiate_mvars (s.instantiate_lambdas [mv]),
@@ -48,15 +48,15 @@ do `(polytime_fun %%s) ← tactic.target,
 meta def apply_polyfun.comp (md : transparency) : tactic ℕ :=
 do fail_if_success `[exact polytime_fun.const _],
    fail_if_success (to_expr ``(polytime_fun.pair) >>= λ e, apply e {md := md}),
+   old_goal ← target,
    n ← get_num_params, guard (0 < n ∧ n ≤ polytime_fun_lemmas.length),
    s ← resolve_name (polytime_fun_comp_lemmas.inth (n-1)),
    s' ← to_expr s,
    apply s' {md := md},
-   try `[ any_goals { apply_instance, } ],
-   when (n = 1) (fail_if_success
-    (swap >> ((to_expr ``(polytime_fun.id) >>= λ e, exact e md) <|>
-             (to_expr ``(polytime_fun.id')) >>= λ e, exact e md))),
-   return (n-1)
+   try `[ any_goals { apply_instance, } ], -- why is this necessary??
+   (fail_if_success (unfold_polytime md >> target >>= λ t, unify t old_goal md)) <|>
+    focus1 (apply_rules [] [``polyfun] 50 { md := md } >> done),
+  return (n-1)
 
 meta def polyfun_tactics (md : transparency := reducible) : list (tactic string) :=
 [
@@ -96,4 +96,21 @@ attribute [polyfun]
   polytime_fun.encode
   polytime_fun.decode'
 
+
+-- section
+-- parameters {α β γ δ : Type*} [polycodable α] [polycodable β] [polycodable γ] [polycodable δ]
+
+-- example {f : α → β} (hf : polytime_fun f) : polytime_fun f := by polyfun
+-- example {f : α → β} : polytime_fun f := by { try { polyfun }, sorry, }
+-- example {f : α → β → γ} : polytime_fun₂ f := by { polyfun, }
+
+-- @[irreducible]
+-- def f : α → β → γ := sorry
+-- lemma f_polyfun : polytime_fun₂ f := sorry
+-- local attribute [polyfun] f_polyfun
+
+-- example : polytime_fun₂ f := by { polyfun, }
+-- example : polytime_fun (λ x : α × β, f x.1 x.2) := by { polyfun, }
+
+-- end
 end
