@@ -45,6 +45,20 @@ There are a few files containing essentially dead code that need to be cleaned u
   
 ## Example of the tactic
 
+```lean
+def list_product {α β} (l₁ : list α) (l₂ : list β) : list (α × β) :=
+(l₁.map (λ x, l₂.map (λ y, (x, y)))).join
+
+example {α β : Type*} [polycodable α] [polycodable β] :
+  polytime_fun₂ (λ (l₁ : list α) (l₂ : list β), list_product l₁ l₂) :=
+by { dunfold list_product, polyfun, }
+```
+
+## TODO
+  - Add a tactic that automatically makes progress on `polysize` goals (a bit trickier than `polytime`) 
+  - Show polynomial time equivalence between Turing machines and the `code` model
+  - Define NP, NP completeness, and show SAT is NP complete
+  - Show other problems like graph coloring, max cut, clique, etc. are NP complete.
 
 
 
