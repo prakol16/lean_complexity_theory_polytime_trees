@@ -36,7 +36,7 @@ There are a few files containing essentially dead code that need to be cleaned u
       definitions that the tactic depends on.
   - `polytime_tac.lean` -- A tactic, `polyfun`, to automatically discharge goals of the form `polytime_fun f`.
   - `polycodable.lean` -- Proves many more encodings are `polycodable` using `polyfun`
-  - `polysize.lean` -- Defines predicattes `polysize_fun`, `polysize_fun_safe`, and `polysize_fun_uniform` which are each some variant
+  - `polysize.lean` -- Defines predicates `polysize_fun`, `polysize_fun_safe`, and `polysize_fun_uniform` which are each some variant
     of the fact that some function's growth is bounded by a polynomial in the input (possibly uniformly with respect to another input).
   - `polyfix.lean` -- Proves that repeatedly evaluating a polynomial time function $f : \sigma \rightarrow \sigma$ polynomially many times such that the
     state $\sigma$ doesn't grow to fast results in a polynomial time function.
