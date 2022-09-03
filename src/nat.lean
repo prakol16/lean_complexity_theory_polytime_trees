@@ -236,3 +236,20 @@ begin
 end
 
 end
+
+universe u
+def pos_num.crec {α} {motive : Type u} (base : α → motive) (pre₁ pre₂ : pos_num → α → α) 
+  (post₁ post₂ : motive → pos_num → α → motive) : pos_num → α → motive
+| 1 x := base x
+| N@(pos_num.bit0 n) x := post₁ (pos_num.crec n (pre₁ N x)) N x
+| N@(pos_num.bit1 n) x := post₂ (pos_num.crec n (pre₂ N x)) N x
+
+#check pos_num.cases_on
+example {n₁ n₂} : pos_num.add n₁ n₂ = pos_num.crec (λ b, pos_num.succ b)
+  sorry --(λ b, @pos_num.cases_on (λ _, pos_num) b _ _ _)
+  sorry --(λ b, b.cases_on _ _ _)
+  (λ ih n₁ n₂, _) 
+  _ n₁ n₂  :=
+begin
+  delta pos_num.add,
+end
