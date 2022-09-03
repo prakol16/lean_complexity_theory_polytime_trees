@@ -1,6 +1,9 @@
 import tactic.simpa
 import logic.equiv.basic
 import logic.encodable.basic
+import tactic.apply_fun
+import tactic.derive_fintype
+import data.tree
 
 @[derive decidable_eq]
 inductive ptree
@@ -191,5 +194,68 @@ encodable.of_left_inverse encode decode (by simp)
 
 end pencodable
 
-end ptree
+universes u
 
+@[simp]
+def crec {α : Type u} {motive : Type u} (base : α → motive) (pre₁ pre₂ : ptree → α → α) (post : motive → motive → ptree → α → motive) : ptree → α → motive
+| nil d := base d
+| T@(node x y) d := post (crec x (pre₁ T d)) (crec y (pre₂ T d)) T d
+
+lemma _root_.list.map_head' {α β} (x : list α) (f : α → β) :
+  (x.map f).head' = x.head'.map f :=
+by cases x; simp
+
+inductive iterator_stack (α β : Type*)
+| start : ptree → α → iterator_stack
+| mid : ptree → α → β → iterator_stack
+| result : β → iterator_stack
+
+-- Rules:
+-- If res ≠ none:
+    -- If prev.left_res ≠ none:
+      -- prev.left_res = res
+    -- Else:
+      -- prev.res = post prev.left_res res prev.tree prev.arg
+    -- delete current
+-- Else If tree ≠ nil:
+    -- if left_res = none:
+      -- append tree.left to stack with arg = pre₁ tree arg
+    -- else:
+      -- append tree.right to stack with arg = pre₂ tree arg
+-- Else (i.e. res = none ∧ tree = nil):
+    -- res := base arg
+
+variables {α : Type u} {β : Type u} (base : α → β) (pre₁ pre₂ : ptree → α → α) (post : β → β → ptree → α → β)
+open iterator_stack
+@[simp] def stack_step :
+  list (iterator_stack α β) → list (iterator_stack α β) 
+| (result res :: start tree arg :: xs) := mid tree arg res :: xs
+| (result res :: mid tree arg left_res :: xs) := result (post left_res res tree arg) :: xs
+| L@(mid tree arg left_res :: xs) := (start tree.right (pre₂ tree arg)) :: L
+| (start nil arg :: xs) := result (base arg) :: xs
+| L@(start (node x y) arg :: xs) := start x (pre₁ (node x y) arg) :: L
+| x := x
+
+@[simp] lemma stack_step_nil : stack_step base pre₁ pre₂ post [] = [] := rfl
+@[simp] lemma stack_step_singleton (res : β) : stack_step base pre₁ pre₂ post [result res] = [result res] := rfl
+
+def time_steps : ptree → ℕ
+| nil := 1
+| (node a b) := a.time_steps + b.time_steps + 4
+
+@[simp] lemma time_steps_nil : time_steps nil = 1 := rfl
+lemma time_steps_node (a b) : time_steps (node a b) = 1 + b.time_steps + 2 + a.time_steps + 1 :=
+by { rw [time_steps, (show 4 = 1 + 2 + 1, from rfl)], ac_refl, } 
+
+lemma stack_step_iterate (x : ptree) (arg : α) (xs : list (iterator_stack α β)) :
+  (stack_step base pre₁ pre₂ post)^[x.time_steps] (start x arg :: xs) = (result $ x.crec base pre₁ pre₂ post arg) :: xs :=
+by induction x generalizing arg xs; simp [time_steps_node, function.iterate_add, *]
+
+-- example : stack_step base pre₁ pre₂ post = id :=
+-- by { ext x : 1, delta stack_step, delta id_rhs, dsimp, }
+
+@[simp] def length : ptree → ℕ
+| nil := 1
+| (node a b) := a.length + b.length
+
+end ptree
